@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Juggling Engineer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .kanban-column {
+            min-height: 200px;
+        }
+        
+        .kanban-card { cursor: grab; }
+        .kanban-card:active { cursor: grabbing; }
+        .kanban-card.dragging { opacity: 0.5; border: 2px dashed #3b82f6; transform: scale(0.98); }
+        
+        .todo-card { cursor: grab; }
+        .todo-card:active { cursor: grabbing; }
+        .todo-card.dragging-todo { opacity: 0.5; border: 2px dashed #3b82f6; transform: scale(0.98); }
+
+        /* Custom styles for progress bar */
+        progress::-webkit-progress-bar {
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+        }
+        progress::-webkit-progress-value {
+            background-color: #3b82f6;
+            border-radius: 9999px;
+        }
+        progress::-moz-progress-bar {
+            background-color: #3b82f6;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen flex flex-col overflow-hidden">
+
+    <!-- Login / Passcode Screen -->
+    <div id="loginScreen" class="fixed inset-0 bg-gray-100 z-50 flex items-center justify-center fade-in">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full mx-4 border border-gray-100 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+            <div class="w-20 h-20 bg-gradient-to-br from-blue-100 to-indigo-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner border border-blue-100/50">
+                <i class="fa-solid fa-masks-theater"></i>
+            </div>
+            <h1 class="text-3xl font-extrabold mb-2 tracking-tight text-gray-900">The Juggling Engineer</h1>
+            <p class="text-gray-500 mb-6 text-sm font-medium">To-Do, Proposal, & Project Pipeline Tracker</p>
+            
+            <form id="loginForm" class="space-y-4">
+                <input type="text" id="passcodeInput" required placeholder="Workspace code (e.g., example)" 
+                    class="w-full px-5 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-center font-medium bg-gray-50 focus:bg-white text-lg">
+                <button type="submit" 
+                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
+                    Open Workspace <i class="fa-solid fa-arrow-right ml-2"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App UI (Hidden by default) -->
+    <div id="appScreen" class="hidden h-full flex-col">
+        
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shrink-0 shadow-sm z-10 relative">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-blue-200">
+                    <i class="fa-solid fa-masks-theater text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight text-gray-900 leading-tight">The Juggling Engineer</h1>
+                    <p class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider" id="workspaceTitle">Workspace: Default</p>
+                </div>
+            </div>
+            
+            <nav class="flex space-x-1 bg-gray-100/80 p-1.5 rounded-xl border border-gray-200/50 backdrop-blur-sm">
+                <button onclick="switchSection('todos')" id="navTodos" class="px-4 py-2 text-sm font-semibold rounded-lg bg-white shadow-sm text-gray-800 transition-all">To Do</button>
+                <button onclick="switchSection('proposals')" id="navProposals" class="px-4 py-2 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all">Proposals</button>
+                <button onclick="switchSection('projects')" id="navProjects" class="px-4 py-2 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all">Projects</button>
+                <button onclick="switchSection('kanban')" id="navKanban" class="px-4 py-2 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all">Deliverables</button>
+            </nav>
+
+            <div class="flex items-center gap-2">
+                <!-- Settings / Backup Dropdown -->
+                <div class="relative group">
+                    <button class="text-gray-400 hover:text-blue-600 transition-colors p-2.5 rounded-xl hover:bg-blue-50">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                    <!-- Dropdown Menu -->
+                    <div class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right scale-95 group-hover:scale-100 z-50 overflow-hidden">
+                        <div class="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                            <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Data Management</span>
+                        </div>
+                        <button onclick="exportData()" class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-3 transition-colors">
+                            <i class="fa-solid fa-download text-gray-400"></i> Export Backup
+                        </button>
+                        <label class="w-full text-left px-4 py-3 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-3 cursor-pointer transition-colors border-t border-gray-50">
+                            <i class="fa-solid fa-upload text-gray-400"></i> Import Backup
+                            <input type="file" id="importFile" class="hidden" accept=".json" onchange="importData(event)">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="w-px h-6 bg-gray-200 mx-1"></div>
+
+                <button id="logoutBtn" class="text-gray-500 hover:text-red-600 transition-colors p-2.5 rounded-xl hover:bg-red-50 text-sm font-medium flex items-center gap-2">
+                    <i class="fa-solid fa-right-from-bracket"></i> Exit
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-hidden relative">
+            
+            <!-- SECTION: TO DOS -->
+            <div id="section-todos" class="absolute inset-0 p-6 overflow-y-auto fade-in flex flex-col hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">My To-Do List</h2>
+                        <p class="text-gray-500 text-sm">Organize and prioritize your daily tasks.</p>
+                    </div>
+                </div>
+
+                <!-- Add Todo Form -->
+                <form id="formTodo" class="mb-6 flex gap-3 bg-white p-2 rounded-xl shadow-sm border border-gray-200 w-full max-w-3xl">
+                    <input type="text" id="newTodoText" placeholder="What needs to get done?" required
+                        class="flex-1 px-4 py-2 bg-transparent focus:outline-none text-gray-800 font-medium placeholder-gray-400">
+                    <select id="newTodoBucket" class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium text-gray-700">
+                        <option value="today">Today</option>
+                        <option value="high">High Priority</option>
+                        <option value="low">Lower Priority</option>
+                        <option value="personal">Personal</option>
+                    </select>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold transition-colors shadow-sm">
+                        <i class="fa-solid fa-plus mr-1"></i> Add
+                    </button>
+                </form>
+
+                <!-- Active To-Do Board -->
+                <div id="todoActiveBoard" class="flex gap-4 mb-8 min-h-[300px]">
+                    <!-- Columns rendered via JS -->
+                </div>
+
+                <!-- Archived To-Dos -->
+                <div class="mt-4 pt-6 border-t-2 border-gray-200 border-dashed relative">
+                    <div class="absolute -top-3 left-6 bg-gray-100 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Completed / Archived</div>
+                    <div id="todoArchiveList" class="flex flex-col gap-2 max-w-3xl opacity-70">
+                        <!-- Archived rendered via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: PROPOSALS -->
+            <div id="section-proposals" class="absolute inset-0 p-6 overflow-y-auto fade-in flex flex-col hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Proposals & Pipeline</h2>
+                        <p class="text-gray-500 text-sm">Track upcoming work and win probabilities.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <select id="fiscalYearSelect" class="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold shadow-sm" onchange="renderProposals()">
+                            <!-- Options injected via JS -->
+                        </select>
+                        <button onclick="openModal('proposalModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> New Proposal
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Metrics Dashboard -->
+                <div class="grid grid-cols-4 gap-4 mb-6" id="proposalMetrics">
+                    <!-- Metrics Injected via JS -->
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500 font-bold">
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors w-16" onclick="sortProposals('seq')">No. <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors" onclick="sortProposals('name')">Name <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors" onclick="sortProposals('role')">Role <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors" onclick="sortProposals('status')">Status <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors text-right" onclick="sortProposals('budget')">Budget <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 cursor-pointer hover:bg-gray-100 transition-colors text-center w-24" onclick="sortProposals('winProb')">Win % <i class="fa-solid fa-sort ml-1 opacity-50"></i></th>
+                                    <th class="p-4 w-16 text-center">Act</th>
+                                </tr>
+                            </thead>
+                            <tbody id="proposalsTableBody" class="divide-y divide-gray-100">
+                                <!-- Rows injected via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: PROJECTS -->
+            <div id="section-projects" class="absolute inset-0 p-6 overflow-y-auto fade-in hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Project Portfolio</h2>
+                        <p class="text-gray-500 text-sm">Manage active workspaces and related deliverables.</p>
+                    </div>
+                    <button onclick="openModal('projectModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
+                        <i class="fa-solid fa-folder-plus"></i> New Project
+                    </button>
+                </div>
+
+                <div class="space-y-8">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-bolt text-yellow-500"></i> Active Projects</h3>
+                        <div id="activeProjectsList" class="flex flex-col gap-3"></div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-check-double text-green-500"></i> Completed Projects</h3>
+                        <div id="completedProjectsList" class="flex flex-col gap-3 opacity-80"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION: KANBAN -->
+            <div id="section-kanban" class="absolute inset-0 p-6 overflow-x-auto fade-in hidden bg-gray-100/50">
+                <div class="flex justify-between items-center mb-6 sticky left-0">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Deliverables Board</h2>
+                        <p class="text-gray-500 text-sm">Drag and drop tasks across your workflow pipeline.</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="openModal('deliverableModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> New Deliverable
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex gap-6 h-[calc(100%-80px)] pb-4" id="kanbanBoard">
+                    <!-- Columns injected via JS -->
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Modals Overlay -->
+    <div id="modalOverlay" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center fade-in">
+        
+        <!-- Proposal Goal Modal -->
+        <div id="goalModal" class="hidden bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full mx-4 relative transform transition-all">
+            <button onclick="closeModals()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-xl font-bold mb-4">Set Fiscal Goal</h3>
+            <form id="formGoal" class="space-y-4">
+                <input type="hidden" id="goalYear">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Target Budget for <span id="goalYearLabel"></span></label>
+                    <input type="number" id="goalAmount" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded-xl font-semibold hover:bg-blue-700">Save Goal</button>
+            </form>
+        </div>
+
+        <!-- Proposal Modal -->
+        <div id="proposalModal" class="hidden bg-white p-6 rounded-3xl shadow-2xl max-w-md w-full mx-4 relative transform transition-all max-h-[90vh] overflow-y-auto">
+            <button onclick="closeModals()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-xl font-bold mb-4" id="proposalModalTitle">Add Proposal</h3>
+            <form id="formProposal" class="space-y-4">
+                <input type="hidden" id="propId">
+                <input type="hidden" id="propSeq">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Proposal Name</label>
+                    <input type="text" id="propName" class="w-full px-4 py-2 border rounded-xl" required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                        <select id="propRole" class="w-full px-4 py-2 border rounded-xl">
+                            <option value="Lead">Lead</option>
+                            <option value="Support">Support</option>
+                            <option value="">N/A</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select id="propStatus" class="w-full px-4 py-2 border rounded-xl">
+                            <option value="Upcoming">Upcoming</option>
+                            <option value="In-Progress">In-Progress</option>
+                            <option value="Pending Decision">Pending Decision</option>
+                            <option value="Win">Win</option>
+                            <option value="Loss">Loss</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Budget ($)</label>
+                        <input type="number" id="propBudget" class="w-full px-4 py-2 border rounded-xl" value="0">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Win Probability (%)</label>
+                        <input type="number" id="propWinProb" class="w-full px-4 py-2 border rounded-xl" min="0" max="100" value="50">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Fiscal Year</label>
+                    <select id="propYear" class="w-full px-4 py-2 border rounded-xl"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                    <textarea id="propNotes" rows="2" class="w-full px-4 py-2 border rounded-xl text-sm"></textarea>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="btnDeleteProp" onclick="deleteProposal()" class="hidden px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl font-medium">Delete</button>
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Project Modal -->
+        <div id="projectModal" class="hidden bg-white p-6 rounded-3xl shadow-2xl max-w-md w-full mx-4 relative transform transition-all">
+            <button onclick="closeModals()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-xl font-bold mb-4" id="projectModalTitle">Add Project</h3>
+            <form id="formProject" class="space-y-4">
+                <input type="hidden" id="projId">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+                    <input type="text" id="projName" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select id="projStatus" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500" onchange="document.getElementById('projDateContainer').classList.toggle('hidden', this.value !== 'Completed')">
+                        <option value="Active">Active</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+                <div id="projDateContainer" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Completion Date</label>
+                    <input type="date" id="projDate" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="btnDeleteProj" onclick="deleteProject()" class="hidden px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl font-medium">Delete</button>
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Deliverable Modal -->
+        <div id="deliverableModal" class="hidden bg-white p-6 rounded-3xl shadow-2xl max-w-md w-full mx-4 relative transform transition-all">
+            <button onclick="closeModals()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="text-xl font-bold mb-4" id="deliverableModalTitle">Add Deliverable</h3>
+            <form id="formDeliverable" class="space-y-4">
+                <input type="hidden" id="delivId">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Parent Project</label>
+                    <select id="delivProject" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500" required>
+                        <!-- Options injected via JS -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Deliverable Name</label>
+                    <input type="text" id="delivName" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select id="delivStatus" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500">
+                            <option value="Backlog">Backlog</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="In-Progress">In-Progress</option>
+                            <option value="Done">Done</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Budget ($) <span class="text-gray-400 font-normal text-xs">Optional</span></label>
+                        <input type="number" id="delivBudget" class="w-full px-4 py-2 border rounded-xl focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <div id="delivDateContainer" class="hidden">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Completion Date</label>
+                    <input type="date" id="delivDate" class="w-full px-4 py-2 border rounded-xl">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="btnDeleteDeliv" onclick="deleteDeliverable()" class="hidden px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl font-medium">Delete</button>
+                    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-blue-700">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Clean Slate Default State
+        let fiscalGoals = {};
+        const projectColors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
+        
+        let projects = [];
+        let proposals = [];
+        let deliverables = [];
+        let todos = [];
+
+        let currentPasscode = '';
+        let activeSection = 'todos';
+        let expandedProjects = new Set();
+        let currentSort = { column: 'seq', direction: 'asc' };
+
+        const formatCurrency = (num) => {
+            if(!num) return '$0';
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+        };
+
+        function exportData() {
+            const dataStr = JSON.stringify({ fiscalGoals, projects, deliverables, proposals, todos }, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `juggling-engineer-backup-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (importedData.projects) projects = importedData.projects;
+                    if (importedData.deliverables) deliverables = importedData.deliverables;
+                    if (importedData.proposals) proposals = importedData.proposals;
+                    if (importedData.todos) todos = importedData.todos;
+                    if (importedData.fiscalGoals) fiscalGoals = importedData.fiscalGoals;
+                    setupFiscalYearSelector();
+                    switchSection(activeSection);
+                    document.getElementById('importFile').value = '';
+                    alert('Backup imported successfully!');
+                } catch (err) {
+                    alert('Error parsing backup file. Ensure it is a valid JSON.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            currentPasscode = document.getElementById('passcodeInput').value.trim();
+            
+            // Generate dummy data if user types exactly "example"
+            if (currentPasscode.toLowerCase() === 'example') {
+                populateDummyData();
+            }
+
+            document.getElementById('workspaceTitle').innerText = 'Workspace: ' + currentPasscode;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('appScreen').classList.remove('hidden');
+            document.getElementById('appScreen').classList.add('flex');
+            
+            setupFiscalYearSelector();
+            switchSection('todos');
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            document.getElementById('appScreen').classList.add('hidden');
+            document.getElementById('appScreen').classList.remove('flex');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('passcodeInput').value = '';
+            // Clear memory on logout to prevent state bleeding
+            projects = []; proposals = []; deliverables = []; todos = []; fiscalGoals = {};
+        });
+
+        function populateDummyData() {
+            const currentFY = 'FY' + (new Date().getFullYear() + 1).toString().slice(-2);
+            
+            fiscalGoals = {};
+            fiscalGoals[currentFY] = 100000;
+            
+            projects = [
+                { id: 'proj1', name: 'Acme Corp API Refactor', status: 'Active', color: '#3b82f6', completedDate: '' },
+                { id: 'proj2', name: 'Globex Website Redesign', status: 'Active', color: '#10b981', completedDate: '' }
+            ];
+            proposals = [
+                { id: 'prop1', seq: 1, name: 'Initech Server Migration', role: 'Lead', status: 'Pending Decision', budget: 45000, winProb: 50, year: currentFY, notes: 'Waiting on budget approval.' }
+            ];
+            deliverables = [
+                { id: 'd1', projectId: 'proj1', name: 'Database Schema', status: 'Done', budget: 5000, isArchived: false, completedDate: '2026-08-01' },
+                { id: 'd2', projectId: 'proj1', name: 'Auth Module', status: 'In-Progress', budget: 8000, isArchived: false },
+                { id: 'd3', projectId: 'proj2', name: 'Wireframes', status: 'Backlog', budget: 2000, isArchived: false }
+            ];
+            todos = [
+                { id: 't1', text: 'Email Acme Corp status update', bucket: 'today', isCompleted: false, order: 0 },
+                { id: 't2', text: 'Renew domain registration', bucket: 'high', isCompleted: false, order: 0 }
+            ];
+        }
+
+        function switchSection(sectionId) {
+            activeSection = sectionId;
+            ['todos', 'proposals', 'projects', 'kanban'].forEach(id => {
+                document.getElementById(`section-${id}`).classList.add('hidden');
+                const navBtn = document.getElementById(`nav${id.charAt(0).toUpperCase() + id.slice(1)}`);
+                if(navBtn) {
+                    navBtn.className = 'px-4 py-2 text-sm font-medium rounded-lg text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all';
+                }
+            });
+
+            document.getElementById(`section-${sectionId}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav${sectionId.charAt(0).toUpperCase() + sectionId.slice(1)}`);
+            if(activeNav) {
+                activeNav.className = 'px-4 py-2 text-sm font-semibold rounded-lg bg-white shadow-sm text-gray-800 transition-all';
+            }
+
+            if (sectionId === 'todos') renderTodos();
+            if (sectionId === 'proposals') renderProposals();
+            if (sectionId === 'projects') renderProjects();
+            if (sectionId === 'kanban') renderKanban();
+        }
+
+        document.getElementById('formTodo').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = document.getElementById('newTodoText').value;
+            const bucket = document.getElementById('newTodoBucket').value;
+            todos.push({
+                id: 'todo_' + Date.now(),
+                text: text,
+                bucket: bucket,
+                isCompleted: false,
+                order: todos.filter(t => t.bucket === bucket).length
+            });
+            document.getElementById('newTodoText').value = '';
+            renderTodos();
+        });
+
+        function toggleTodoCompletion(id) {
+            const todo = todos.find(t => t.id === id);
+            if(todo) {
+                todo.isCompleted = !todo.isCompleted;
+                renderTodos();
+            }
+        }
+
+        function deleteTodo(id) {
+            if(confirm('Delete this task?')) {
+                todos = todos.filter(t => t.id !== id);
+                renderTodos();
+            }
+        }
+
+        let draggedTodoId = null;
+        function dragTodoStart(e) {
+            draggedTodoId = e.target.id.replace('todo_', '');
+            e.target.classList.add('dragging-todo');
+        }
+        function dragTodoEnd(e) {
+            e.target.classList.remove('dragging-todo');
+        }
+        function dragTodoOver(e) {
+            e.preventDefault();
+        }
+        function dropTodoItem(e) {
+            e.preventDefault();
+            const column = e.target.closest('.todo-column');
+            if (!column || !draggedTodoId) return;
+            const newBucket = column.dataset.bucket;
+            const todo = todos.find(t => t.id === draggedTodoId);
+            
+            if (todo && todo.bucket !== newBucket) {
+                todo.bucket = newBucket;
+                renderTodos();
+            }
+        }
+
+        function renderTodos() {
+            const activeBoard = document.getElementById('todoActiveBoard');
+            const archiveList = document.getElementById('todoArchiveList');
+            activeBoard.innerHTML = '';
+            archiveList.innerHTML = '';
+
+            const buckets = [
+                { id: 'today', name: 'Today', color: 'red', bg: 'bg-red-50/50', border: 'border-red-200', header: 'text-red-800 bg-red-100', accent: 'border-l-red-500' },
+                { id: 'high', name: 'High Priority', color: 'orange', bg: 'bg-orange-50/50', border: 'border-orange-200', header: 'text-orange-800 bg-orange-100', accent: 'border-l-orange-500' },
+                { id: 'low', name: 'Lower Priority', color: 'blue', bg: 'bg-blue-50/50', border: 'border-blue-200', header: 'text-blue-800 bg-blue-100', accent: 'border-l-blue-500' },
+                { id: 'personal', name: 'Personal', color: 'green', bg: 'bg-green-50/50', border: 'border-green-200', header: 'text-green-800 bg-green-100', accent: 'border-l-green-500' }
+            ];
+
+            todos.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+            buckets.forEach(bucket => {
+                const activeTasks = todos.filter(t => t.bucket === bucket.id && !t.isCompleted);
+                
+                let cardsHtml = activeTasks.map(t => `
+                    <div id="todo_${t.id}" draggable="true" ondragstart="dragTodoStart(event)" ondragend="dragTodoEnd(event)" class="todo-card group flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100 border-l-4 ${bucket.accent} hover:-translate-y-1 hover:shadow-md transform transition-all duration-200">
+                        <button onclick="toggleTodoCompletion('${t.id}')" class="mt-0.5 text-gray-300 hover:text-green-500 transition-colors shrink-0">
+                            <i class="fa-regular fa-circle text-xl"></i>
+                        </button>
+                        <span class="text-sm font-medium text-gray-800 flex-1 leading-tight">${t.text}</span>
+                        <button onclick="deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded">
+                            <i class="fa-solid fa-xmark text-sm"></i>
+                        </button>
+                    </div>
+                `).join('');
+
+                activeBoard.innerHTML += `
+                    <div class="flex-1 flex flex-col bg-white rounded-2xl overflow-hidden border ${bucket.border} shadow-sm">
+                        <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <h3 class="font-bold text-sm px-3 py-1 rounded-full ${bucket.header}">${bucket.name}</h3>
+                            <span class="text-gray-400 text-xs font-bold">${activeTasks.length}</span>
+                        </div>
+                        <div class="todo-column flex-1 overflow-y-auto p-3 flex flex-col gap-3 ${bucket.bg}" data-bucket="${bucket.id}" ondragover="dragTodoOver(event)" ondrop="dropTodoItem(event)">
+                            ${cardsHtml}
+                            ${activeTasks.length === 0 ? `<div class="text-center text-xs text-gray-400 italic py-6">No tasks</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+
+            const completedTasks = todos.filter(t => t.isCompleted);
+            completedTasks.forEach(t => {
+                archiveList.innerHTML += `
+                    <div class="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                        <button onclick="toggleTodoCompletion('${t.id}')" class="text-green-500 hover:text-gray-400 transition-colors shrink-0">
+                            <i class="fa-solid fa-circle-check text-lg"></i>
+                        </button>
+                        <span class="text-sm text-gray-500 line-through flex-1">${t.text}</span>
+                        <button onclick="deleteTodo('${t.id}')" class="text-gray-400 hover:text-red-500 p-1">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                `;
+            });
+            if(completedTasks.length === 0) archiveList.innerHTML = `<div class="text-sm text-gray-400 italic">No completed tasks yet.</div>`;
+        }
+
+        function setupFiscalYearSelector() {
+            const select = document.getElementById('fiscalYearSelect');
+            const propYearSelect = document.getElementById('propYear');
+            
+            let years = new Set(proposals.map(p => p.year));
+            Object.keys(fiscalGoals).forEach(y => years.add(y));
+            const currentYear = 'FY' + (new Date().getFullYear() + 1).toString().slice(-2);
+            years.add(currentYear);
+            
+            const sortedYears = Array.from(years).sort().reverse();
+            
+            select.innerHTML = '';
+            propYearSelect.innerHTML = '';
+            sortedYears.forEach(y => {
+                select.add(new Option(y, y));
+                propYearSelect.add(new Option(y, y));
+            });
+        }
+
+        function sortProposals(col) {
+            if (currentSort.column === col) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = col;
+                currentSort.direction = 'asc';
+            }
+            renderProposals();
+        }
+
+        function renderProposals() {
+            const currentYear = document.getElementById('fiscalYearSelect').value;
+            const yearProps = proposals.filter(p => p.year === currentYear);
+            
+            yearProps.sort((a, b) => {
+                let valA = a[currentSort.column];
+                let valB = b[currentSort.column];
+                if(typeof valA === 'string') valA = valA.toLowerCase();
+                if(typeof valB === 'string') valB = valB.toLowerCase();
+                
+                if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            const tbody = document.getElementById('proposalsTableBody');
+            tbody.innerHTML = '';
+
+            let totalPending = 0;
+            let totalWon = 0;
+            let totalLost = 0;
+
+            yearProps.forEach(p => {
+                const b = parseFloat(p.budget) || 0;
+                if (p.status.includes('Pending')) totalPending += b;
+                if (p.status === 'Win') totalWon += b;
+                if (p.status === 'Loss') totalLost += b;
+
+                let statusBadge = '';
+                if(p.status === 'Win') statusBadge = 'bg-green-100 text-green-800';
+                else if(p.status === 'Loss') statusBadge = 'bg-red-100 text-red-800';
+                else if(p.status.includes('Pending')) statusBadge = 'bg-yellow-100 text-yellow-800';
+                else statusBadge = 'bg-gray-100 text-gray-800';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50/50 transition-colors group">
+                        <td class="p-4 text-sm text-gray-500 font-medium">${p.seq || '-'}</td>
+                        <td class="p-4">
+                            <div class="font-bold text-gray-800">${p.name}</div>
+                            ${p.notes ? `<div class="text-xs text-gray-400 mt-1 truncate max-w-xs"><i class="fa-regular fa-comment-dots mr-1"></i>${p.notes}</div>` : ''}
+                        </td>
+                        <td class="p-4 text-sm text-gray-600">${p.role || '-'}</td>
+                        <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${statusBadge}">${p.status}</span></td>
+                        <td class="p-4 text-right font-medium text-gray-700">${formatCurrency(p.budget)}</td>
+                        <td class="p-4 text-center text-sm font-semibold text-gray-600">${p.winProb || 0}%</td>
+                        <td class="p-4 text-center">
+                            <button onclick="openModal('proposalModal', '${p.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100"><i class="fa-solid fa-pen"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            const goal = fiscalGoals[currentYear] || 0;
+            const progressPct = goal > 0 ? Math.min(100, (totalWon / goal) * 100) : 0;
+
+            document.getElementById('proposalMetrics').innerHTML = `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Pending Value</div>
+                    <div class="text-xl font-extrabold text-yellow-600">${formatCurrency(totalPending)}</div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Total Won</div>
+                    <div class="text-xl font-extrabold text-green-600">${formatCurrency(totalWon)}</div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Total Lost</div>
+                    <div class="text-xl font-extrabold text-red-600">${formatCurrency(totalLost)}</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-4 rounded-2xl shadow-sm text-white relative overflow-hidden group cursor-pointer" onclick="openModal('goalModal')">
+                    <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
+                    <div class="flex justify-between items-center mb-1">
+                        <div class="text-xs font-bold text-blue-200 uppercase">${currentYear} Goal</div>
+                        <i class="fa-solid fa-pen text-blue-300 text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </div>
+                    <div class="text-xl font-extrabold">${formatCurrency(totalWon)} <span class="text-sm font-normal text-blue-200">/ ${formatCurrency(goal)}</span></div>
+                    <progress value="${progressPct}" max="100" class="w-full h-1.5 mt-2 rounded-full overflow-hidden bg-blue-900/50"></progress>
+                </div>
+            `;
+        }
+
+        function toggleExpandedProject(id) {
+            if (expandedProjects.has(id)) expandedProjects.delete(id);
+            else expandedProjects.add(id);
+            renderProjects();
+        }
+
+        function renderProjects() {
+            const activeList = document.getElementById('activeProjectsList');
+            const completedList = document.getElementById('completedProjectsList');
+            activeList.innerHTML = '';
+            completedList.innerHTML = '';
+
+            projects.forEach(p => {
+                const projectDeliverables = deliverables.filter(d => d.projectId === p.id);
+                const totalBudget = projectDeliverables.reduce((sum, d) => sum + (d.budget || 0), 0);
+                const isExpanded = expandedProjects.has(p.id);
+
+                let deliverablesHtml = '';
+                if (isExpanded) {
+                    const rows = projectDeliverables.map(d => `
+                        <tr class="border-b border-gray-100 last:border-0 hover:bg-white transition-colors">
+                            <td class="py-2 px-4 text-sm font-medium text-gray-800">${d.name}</td>
+                            <td class="py-2 px-4 text-xs"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold">${d.status}</span></td>
+                            <td class="py-2 px-4 text-sm text-gray-600 text-right">${formatCurrency(d.budget)}</td>
+                        </tr>
+                    `).join('');
+                    
+                    deliverablesHtml = rows ? `
+                        <div class="border-t border-gray-100 bg-gray-50/50 fade-in">
+                            <table class="w-full text-left">
+                                <tbody>${rows}</tbody>
+                            </table>
+                        </div>
+                    ` : `<div class="border-t border-gray-100 bg-gray-50/50 p-4 text-sm text-gray-400 italic">No deliverables tracked.</div>`;
+                }
+
+                const cardHtml = `
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md hover:border-blue-200">
+                        <div class="p-4 flex justify-between items-center cursor-pointer hover:bg-blue-50/30 transition-colors" onclick="toggleExpandedProject('${p.id}')">
+                            <div class="flex items-center gap-4">
+                                <div class="w-4 h-4 rounded-full shadow-sm shrink-0 border border-gray-200/50" style="background-color: ${p.color};"></div>
+                                <div>
+                                    <span class="font-bold text-gray-800 text-lg block leading-tight">${p.name}</span>
+                                    ${p.completedDate ? `<span class="text-xs text-gray-400"><i class="fa-solid fa-check text-green-500 mr-1"></i>Completed: ${p.completedDate}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="text-right">
+                                    <div class="text-sm font-bold text-gray-700">${formatCurrency(totalBudget)}</div>
+                                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">${projectDeliverables.length} Tasks</div>
+                                </div>
+                                <div class="flex gap-1 ml-2">
+                                    <button onclick="event.stopPropagation(); openModal('projectModal', '${p.id}')" class="text-gray-300 hover:text-blue-600 p-2 rounded hover:bg-blue-50 transition-colors"><i class="fa-solid fa-pen"></i></button>
+                                </div>
+                                <i class="fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} text-gray-400 ml-2 text-sm w-4"></i>
+                            </div>
+                        </div>
+                        ${deliverablesHtml}
+                    </div>
+                `;
+                
+                if(p.status === 'Active') activeList.innerHTML += cardHtml;
+                else if(p.status === 'Completed') completedList.innerHTML += cardHtml;
+            });
+        }
+
+        let draggedDeliverableId = null;
+        function dragStart(e) {
+            draggedDeliverableId = e.target.id.replace('card_', '');
+            e.target.classList.add('dragging');
+        }
+        function dragEnd(e) {
+            e.target.classList.remove('dragging');
+        }
+        function dragOver(e) {
+            e.preventDefault();
+        }
+        function dropItem(e) {
+            e.preventDefault();
+            const column = e.target.closest('.kanban-column');
+            if (!column || !draggedDeliverableId) return;
+            const newStatus = column.dataset.status;
+            const deliv = deliverables.find(d => d.id === draggedDeliverableId);
+            
+            if (deliv && deliv.status !== newStatus) {
+                deliv.status = newStatus;
+                
+                if(newStatus === 'Done' && !deliv.completedDate) {
+                    const today = new Date();
+                    deliv.completedDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                }
+                
+                renderKanban();
+                renderProjects();
+            }
+        }
+
+        function toggleArchiveDeliverable(id) {
+            const deliv = deliverables.find(d => d.id === id);
+            if(deliv) {
+                deliv.isArchived = !deliv.isArchived;
+                renderKanban();
+            }
+        }
+
+        function renderKanban() {
+            const board = document.getElementById('kanbanBoard');
+            board.innerHTML = '';
+
+            const columnsData = [
+                { id: 'Backlog', name: 'Backlog', color: 'gray', bg: 'bg-gray-50', headerText: 'text-gray-700', badgeBg: 'bg-gray-200 text-gray-700' },
+                { id: 'On Hold', name: 'On Hold', color: 'yellow', bg: 'bg-yellow-50/50', headerText: 'text-yellow-800', badgeBg: 'bg-yellow-200 text-yellow-800' },
+                { id: 'In-Progress', name: 'In-Progress', color: 'blue', bg: 'bg-blue-50/50', headerText: 'text-blue-800', badgeBg: 'bg-blue-200 text-blue-800' },
+                { id: 'Done', name: 'Done', color: 'green', bg: 'bg-green-50/50', headerText: 'text-green-800', badgeBg: 'bg-green-200 text-green-800' }
+            ];
+
+            let pendingExpectedValue = 0;
+            let pendingCount = 0;
+            proposals.forEach(p => {
+                if(p.status === 'Pending Decision' || p.status === 'Pending') {
+                    pendingCount++;
+                    pendingExpectedValue += (p.budget || 0) * ((p.winProb || 0) / 100);
+                }
+            });
+
+            columnsData.forEach(colDef => {
+                let colDeliverables = deliverables.filter(d => d.status === colDef.id);
+                
+                let activeCards = '';
+                let archivedCards = '';
+                let totalBudget = 0;
+
+                if (colDef.id === 'Backlog') {
+                    totalBudget += pendingExpectedValue;
+                }
+
+                const generateCardHtml = (d) => {
+                    const proj = projects.find(p => p.id === d.projectId);
+                    const projName = proj ? proj.name : 'Unknown Project';
+                    const projColor = proj ? proj.color : '#ccc';
+                    
+                    let dateBadge = '';
+                    if(d.completedDate) {
+                        dateBadge = `<div class="text-[10px] text-gray-400 mt-2"><i class="fa-regular fa-calendar-check mr-1"></i>${d.completedDate}</div>`;
+                    }
+
+                    let archiveBtn = '';
+                    if(d.status === 'Done') {
+                        if(!d.isArchived) {
+                            archiveBtn = `<button onclick="toggleArchiveDeliverable('${d.id}')" class="absolute bottom-2 right-2 text-gray-300 hover:text-blue-600 transition-colors" title="Archive"><i class="fa-solid fa-box-archive"></i></button>`;
+                        } else {
+                            archiveBtn = `<button onclick="toggleArchiveDeliverable('${d.id}')" class="absolute bottom-2 right-2 text-blue-400 hover:text-blue-600 transition-colors" title="Unarchive"><i class="fa-solid fa-box-open"></i></button>`;
+                        }
+                    }
+
+                    return `
+                        <div id="card_${d.id}" draggable="true" ondragstart="dragStart(event)" ondragend="dragEnd(event)" class="kanban-card bg-white p-3.5 rounded-xl shadow-sm border border-gray-200 hover:border-blue-400 hover:-translate-y-1 hover:shadow-md transform transition-all duration-200 group relative ${d.isArchived ? 'opacity-60 bg-gray-50' : ''}">
+                            <button onclick="openModal('deliverableModal', '${d.id}')" class="absolute top-2 right-2 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 shadow-sm border border-gray-100 hover:bg-blue-50 p-1.5 rounded-lg z-10">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                            <div class="flex items-center gap-2 mb-2">
+                                <div class="w-3 h-3 rounded-full shadow-sm shrink-0" style="background-color: ${projColor};"></div>
+                                <div class="text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">${projName}</div>
+                            </div>
+                            <h4 class="text-sm font-bold text-gray-800 leading-snug mb-2 pr-6">${d.name}</h4>
+                            ${d.budget ? `<div class="text-xs text-green-700 font-semibold mb-2 bg-green-50 inline-block px-1.5 py-0.5 rounded border border-green-100">${formatCurrency(d.budget)}</div>` : ''}
+                            ${dateBadge}
+                            ${archiveBtn}
+                        </div>
+                    `;
+                };
+
+                colDeliverables.forEach(d => {
+                    totalBudget += (d.budget || 0);
+                    if (d.isArchived) archivedCards += generateCardHtml(d);
+                    else activeCards += generateCardHtml(d);
+                });
+
+                let columnInnerHtml = activeCards;
+                
+                if (colDef.id === 'Backlog' && pendingCount > 0) {
+                    let pendingBlockHtml = `
+                        <div class="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-xl border-2 border-indigo-200 border-dashed mb-3 flex flex-col items-center justify-center text-center shadow-sm hover:border-indigo-300 transition-colors">
+                            <i class="fa-solid fa-briefcase text-indigo-400 mb-2 text-xl"></i>
+                            <h4 class="text-xs font-bold text-indigo-800 uppercase tracking-wide mb-1">${pendingCount} Pending Proposals</h4>
+                            <div class="text-base text-indigo-700 font-extrabold">${formatCurrency(pendingExpectedValue)}</div>
+                            <div class="text-[10px] text-indigo-500 font-medium mt-1 uppercase tracking-wider">Expected Pipeline Value</div>
+                        </div>
+                    `;
+                    columnInnerHtml = pendingBlockHtml + columnInnerHtml;
+                }
+
+                if (colDef.id === 'Done' && archivedCards !== '') {
+                    columnInnerHtml += `
+                        <div class="mt-4 pt-4 border-t-2 border-gray-200 border-dashed relative">
+                            <div class="absolute -top-2.5 left-1/2 transform -translate-x-1/2 bg-gray-50 px-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Archived</div>
+                            <div class="flex flex-col gap-3 mt-2">
+                                ${archivedCards}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                board.innerHTML += `
+                    <div class="w-80 shrink-0 flex flex-col bg-white rounded-2xl p-1 border border-gray-200 shadow-sm overflow-hidden">
+                        <div class="${colDef.bg} mb-2 px-4 py-3 flex justify-between items-start rounded-t-xl border-b border-gray-100">
+                            <h3 class="font-bold ${colDef.headerText}">${colDef.name} <span class="ml-1 ${colDef.badgeBg} text-xs px-2 py-0.5 rounded-full font-semibold shadow-sm">${colDeliverables.length}</span></h3>
+                            <div class="text-xs font-bold ${colDef.headerText} opacity-90 bg-white/60 px-2 py-1 rounded-lg border border-white shadow-sm" title="Total Value">${formatCurrency(totalBudget)}</div>
+                        </div>
+                        <div class="kanban-column flex-1 flex flex-col gap-3 overflow-y-auto min-h-[50px] p-2 bg-gray-50/30" data-status="${colDef.id}" ondragover="dragOver(event)" ondrop="dropItem(event)">
+                            ${columnInnerHtml}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function openModal(modalId, itemId = null) {
+            document.getElementById('modalOverlay').classList.remove('hidden');
+            document.getElementById(modalId).classList.remove('hidden');
+
+            if (modalId === 'goalModal') {
+                const yr = document.getElementById('fiscalYearSelect').value;
+                document.getElementById('goalYear').value = yr;
+                document.getElementById('goalYearLabel').innerText = yr;
+                document.getElementById('goalAmount').value = fiscalGoals[yr] || 0;
+            }
+            else if (modalId === 'proposalModal') {
+                const isEdit = !!itemId;
+                document.getElementById('proposalModalTitle').innerText = isEdit ? 'Edit Proposal' : 'Add Proposal';
+                document.getElementById('btnDeleteProp').classList.toggle('hidden', !isEdit);
+                
+                if (isEdit) {
+                    const p = proposals.find(x => x.id === itemId);
+                    document.getElementById('propId').value = p.id;
+                    document.getElementById('propSeq').value = p.seq || '';
+                    document.getElementById('propName').value = p.name;
+                    document.getElementById('propRole').value = p.role;
+                    document.getElementById('propStatus').value = p.status;
+                    document.getElementById('propBudget').value = p.budget;
+                    document.getElementById('propWinProb').value = p.winProb || 0;
+                    document.getElementById('propYear').value = p.year;
+                    document.getElementById('propNotes').value = p.notes || '';
+                } else {
+                    document.getElementById('formProposal').reset();
+                    document.getElementById('propId').value = '';
+                    document.getElementById('propSeq').value = proposals.length + 1;
+                    document.getElementById('propYear').value = document.getElementById('fiscalYearSelect').value;
+                }
+            }
+            else if (modalId === 'projectModal') {
+                const isEdit = !!itemId;
+                document.getElementById('projectModalTitle').innerText = isEdit ? 'Edit Project' : 'Add Project';
+                document.getElementById('btnDeleteProj').classList.toggle('hidden', !isEdit);
+                
+                if (isEdit) {
+                    const p = projects.find(x => x.id === itemId);
+                    document.getElementById('projId').value = p.id;
+                    document.getElementById('projName').value = p.name;
+                    document.getElementById('projStatus').value = p.status;
+                    document.getElementById('projDate').value = p.completedDate || '';
+                    document.getElementById('projDateContainer').classList.toggle('hidden', p.status !== 'Completed');
+                } else {
+                    document.getElementById('formProject').reset();
+                    document.getElementById('projId').value = '';
+                    document.getElementById('projDateContainer').classList.add('hidden');
+                }
+            }
+            else if (modalId === 'deliverableModal') {
+                const isEdit = !!itemId;
+                document.getElementById('deliverableModalTitle').innerText = isEdit ? 'Edit Deliverable' : 'Add Deliverable';
+                document.getElementById('btnDeleteDeliv').classList.toggle('hidden', !isEdit);
+                
+                const projSelect = document.getElementById('delivProject');
+                projSelect.innerHTML = projects.filter(p=>p.status==='Active').map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+                if (isEdit) {
+                    const d = deliverables.find(x => x.id === itemId);
+                    document.getElementById('delivId').value = d.id;
+                    projSelect.value = d.projectId;
+                    document.getElementById('delivName').value = d.name;
+                    document.getElementById('delivStatus').value = d.status;
+                    document.getElementById('delivBudget').value = d.budget || 0;
+                    document.getElementById('delivDate').value = d.completedDate || '';
+                    document.getElementById('delivDateContainer').classList.toggle('hidden', d.status !== 'Done');
+                } else {
+                    document.getElementById('formDeliverable').reset();
+                    document.getElementById('delivId').value = '';
+                    document.getElementById('delivDateContainer').classList.add('hidden');
+                }
+            }
+        }
+
+        function closeModals() {
+            document.getElementById('modalOverlay').classList.add('hidden');
+            ['goalModal', 'proposalModal', 'projectModal', 'deliverableModal'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+        }
+
+        document.getElementById('formGoal').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const y = document.getElementById('goalYear').value;
+            fiscalGoals[y] = parseFloat(document.getElementById('goalAmount').value) || 0;
+            closeModals();
+            renderProposals();
+        });
+
+        document.getElementById('formProposal').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const existingId = document.getElementById('propId').value;
+            const data = {
+                id: existingId || 'prop_' + Date.now(),
+                seq: parseInt(document.getElementById('propSeq').value) || 1,
+                name: document.getElementById('propName').value,
+                role: document.getElementById('propRole').value,
+                status: document.getElementById('propStatus').value,
+                budget: parseFloat(document.getElementById('propBudget').value) || 0,
+                winProb: parseInt(document.getElementById('propWinProb').value) || 0,
+                year: document.getElementById('propYear').value,
+                notes: document.getElementById('propNotes').value
+            };
+            if (existingId) {
+                const idx = proposals.findIndex(p => p.id === existingId);
+                proposals[idx] = data;
+            } else {
+                proposals.push(data);
+            }
+            closeModals();
+            renderProposals();
+            renderKanban(); 
+        });
+
+        document.getElementById('formProject').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const existingId = document.getElementById('projId').value;
+            const newStatus = document.getElementById('projStatus').value;
+            let compDate = document.getElementById('projDate').value;
+            if (newStatus !== 'Completed') compDate = '';
+            
+            if (existingId) {
+                const index = projects.findIndex(p => p.id === existingId);
+                if (index > -1) {
+                    projects[index].name = document.getElementById('projName').value;
+                    projects[index].status = newStatus;
+                    projects[index].completedDate = compDate;
+                }
+            } else {
+                projects.push({
+                    id: 'proj_' + Date.now(),
+                    name: document.getElementById('projName').value,
+                    status: newStatus,
+                    color: projectColors[projects.length % projectColors.length],
+                    completedDate: compDate
+                });
+            }
+            closeModals();
+            renderProjects();
+            renderKanban(); 
+        });
+
+        document.getElementById('formDeliverable').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const existingId = document.getElementById('delivId').value;
+            const newStatus = document.getElementById('delivStatus').value;
+            let compDate = document.getElementById('delivDate').value;
+            if (newStatus !== 'Done') compDate = '';
+            else if (!compDate) compDate = new Date().toISOString().split('T')[0];
+
+            if (existingId) {
+                const index = deliverables.findIndex(d => d.id === existingId);
+                if (index > -1) {
+                    deliverables[index].projectId = document.getElementById('delivProject').value;
+                    deliverables[index].name = document.getElementById('delivName').value;
+                    deliverables[index].status = newStatus;
+                    deliverables[index].budget = parseFloat(document.getElementById('delivBudget').value) || 0;
+                    deliverables[index].completedDate = compDate;
+                }
+            } else {
+                deliverables.push({
+                    id: 'deliv_' + Date.now(),
+                    projectId: document.getElementById('delivProject').value,
+                    name: document.getElementById('delivName').value,
+                    status: newStatus,
+                    budget: parseFloat(document.getElementById('delivBudget').value) || 0,
+                    isArchived: false,
+                    completedDate: compDate
+                });
+            }
+            closeModals();
+            renderKanban();
+            renderProjects();
+        });
+
+        function deleteProposal() {
+            if(confirm('Delete this proposal?')) {
+                const id = document.getElementById('propId').value;
+                proposals = proposals.filter(p => p.id !== id);
+                closeModals();
+                renderProposals();
+                renderKanban();
+            }
+        }
+
+        function deleteProject() {
+            if(confirm('Delete this project and ALL its deliverables?')) {
+                const id = document.getElementById('projId').value;
+                projects = projects.filter(p => p.id !== id);
+                deliverables = deliverables.filter(d => d.projectId !== id);
+                closeModals();
+                renderProjects();
+                renderKanban();
+            }
+        }
+
+        function deleteDeliverable() {
+            if(confirm('Delete this deliverable?')) {
+                const id = document.getElementById('delivId').value;
+                deliverables = deliverables.filter(d => d.id !== id);
+                closeModals();
+                renderKanban();
+                renderProjects();
+            }
+        }
+
+        document.getElementById('delivStatus').addEventListener('change', function() {
+            document.getElementById('delivDateContainer').classList.toggle('hidden', this.value !== 'Done');
+        });
+
+    </script>
+
+    <!-- FIREBASE INTEGRATION -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // 1. PASTE YOUR KEYS HERE
+		 const firebaseConfig = {
+			apiKey: "AIzaSyC8vFDcMsmD4frBnnR5OsC3clDXs5F39rU",
+			authDomain: "jugglingengineer-becd6.firebaseapp.com",
+			projectId: "jugglingengineer-becd6",
+			storageBucket: "jugglingengineer-becd6.firebasestorage.app",
+			messagingSenderId: "52260225231",
+			appId: "1:52260225231:web:afab29fe09f2b12603b7ba"
+		  };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // 2. Override the Login function to fetch from Firebase
+        const originalLogin = document.getElementById('loginForm').onsubmit;
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); // Stop the default form action
+            
+            // Log the user in anonymously behind the scenes
+            await signInAnonymously(auth);
+
+            currentPasscode = document.getElementById('passcodeInput').value.trim();
+            
+            if (currentPasscode.toLowerCase() === 'example') {
+                // Keep the dummy data working for demo purposes
+                populateDummyData();
+                finalizeLogin();
+            } else {
+                // Fetch real data from Firebase using the passcode as the Document ID
+                try {
+                    const docRef = doc(db, "workspaces", currentPasscode);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists()) {
+                        // Workspace exists, load the data!
+                        const data = docSnap.data();
+                        projects = data.projects || [];
+                        proposals = data.proposals || [];
+                        deliverables = data.deliverables || [];
+                        todos = data.todos || [];
+                        fiscalGoals = data.fiscalGoals || {};
+                    } else {
+                        // New workspace, start completely clean
+                        projects = []; proposals = []; deliverables = []; todos = []; fiscalGoals = {};
+                    }
+                    finalizeLogin();
+                } catch (error) {
+                    console.error("Error fetching workspace:", error);
+                    alert("Could not connect to database. Check internet connection.");
+                }
+            }
+        });
+
+        function finalizeLogin() {
+            document.getElementById('workspaceTitle').innerText = 'Workspace: ' + currentPasscode;
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('appScreen').classList.remove('hidden');
+            document.getElementById('appScreen').classList.add('flex');
+            
+            setupFiscalYearSelector();
+            switchSection('todos');
+        }
+
+        // 3. Override Data Saving to Push to Firebase
+        // This function will be called every time you make a change (add, edit, delete, drag)
+        window.saveToFirebase = async function() {
+            if(currentPasscode.toLowerCase() === 'example') return; // Don't save demo data
+
+            const docRef = doc(db, "workspaces", currentPasscode);
+            try {
+                await setDoc(docRef, {
+                    projects: projects,
+                    proposals: proposals,
+                    deliverables: deliverables,
+                    todos: todos,
+                    fiscalGoals: fiscalGoals
+                });
+            } catch (error) {
+                console.error("Error saving data: ", error);
+            }
+        }
+
+        // 4. Attach the save function to all your existing actions
+        const saveWrapper = (fn) => {
+            return function(...args) {
+                const result = fn.apply(this, args);
+                if(window.saveToFirebase) window.saveToFirebase();
+                return result;
+            }
+        };
+
+        // Intercepting form submissions to save data
+        document.getElementById('formTodo').addEventListener('submit', () => setTimeout(saveToFirebase, 100));
+        document.getElementById('formProposal').addEventListener('submit', () => setTimeout(saveToFirebase, 100));
+        document.getElementById('formProject').addEventListener('submit', () => setTimeout(saveToFirebase, 100));
+        document.getElementById('formDeliverable').addEventListener('submit', () => setTimeout(saveToFirebase, 100));
+        document.getElementById('formGoal').addEventListener('submit', () => setTimeout(saveToFirebase, 100));
+
+        // Intercepting specific functions
+        window.toggleTodoCompletion = saveWrapper(window.toggleTodoCompletion);
+        window.deleteTodo = saveWrapper(window.deleteTodo);
+        window.dropTodoItem = saveWrapper(window.dropTodoItem);
+        window.dropItem = saveWrapper(window.dropItem);
+        window.toggleArchiveDeliverable = saveWrapper(window.toggleArchiveDeliverable);
+        window.deleteProposal = saveWrapper(window.deleteProposal);
+        window.deleteProject = saveWrapper(window.deleteProject);
+        window.deleteDeliverable = saveWrapper(window.deleteDeliverable);
+
+    </script>
+</body>
+</html>
