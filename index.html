@@ -35,6 +35,10 @@
         .todo-card:active { cursor: grabbing; }
         .todo-card.dragging-todo { opacity: 0.5; border: 2px dashed #3b82f6; transform: scale(0.98); }
 
+        /* Tag Group Dragging */
+        .tag-group.dragging-tag { opacity: 0.5; border: 2px dashed #3b82f6; border-radius: 12px; padding: 4px; transform: scale(0.99); }
+        .tag-group { transition: transform 0.2s; }
+
         /* Progress Bar Styling */
         progress::-webkit-progress-bar { background-color: #e5e7eb; border-radius: 9999px; }
         progress::-webkit-progress-value { background-color: #3b82f6; border-radius: 9999px; }
@@ -421,6 +425,7 @@
             proposals: [],
             deliverables: [],
             todos: [],
+            tagOrder: [],
             currentPasscode: '',
             activeSection: 'todos',
             expandedProjects: new Set(),
@@ -458,7 +463,8 @@
                 projects: state.projects,
                 proposals: state.proposals,
                 deliverables: state.deliverables,
-                todos: state.todos
+                todos: state.todos,
+                tagOrder: state.tagOrder
             };
             
             try {
@@ -527,6 +533,7 @@
                             state.proposals = data.proposals || [];
                             state.deliverables = data.deliverables || [];
                             state.todos = data.todos || [];
+                            state.tagOrder = data.tagOrder || [];
                         } else {
                             // Initialize clean slate
                             state.fiscalGoals = {};
@@ -534,6 +541,7 @@
                             state.proposals = [];
                             state.deliverables = [];
                             state.todos = [];
+                            state.tagOrder = [];
                         }
                         refreshAllUI();
                     }, (err) => {
@@ -591,7 +599,8 @@
                 projects: state.projects, 
                 deliverables: state.deliverables, 
                 proposals: state.proposals, 
-                todos: state.todos 
+                todos: state.todos,
+                tagOrder: state.tagOrder
             }, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(dataBlob);
@@ -615,6 +624,7 @@
                     if (importedData.deliverables) state.deliverables = importedData.deliverables;
                     if (importedData.proposals) state.proposals = importedData.proposals;
                     if (importedData.todos) state.todos = importedData.todos;
+                    if (importedData.tagOrder) state.tagOrder = importedData.tagOrder;
                     if (importedData.fiscalGoals) state.fiscalGoals = importedData.fiscalGoals;
                     
                     saveDataToFirebase();
@@ -884,6 +894,38 @@
         // ==========================================
         // 8. PROJECTS MODULE
         // ==========================================
+        let draggedTag = null;
+
+        window.dragTagStart = function(e, tag) {
+            draggedTag = tag;
+            e.currentTarget.classList.add('dragging-tag');
+            e.dataTransfer.effectAllowed = 'move';
+        };
+
+        window.dragTagEnd = function(e) { 
+            e.currentTarget.classList.remove('dragging-tag'); 
+        };
+
+        window.dragTagOver = function(e) { 
+            e.preventDefault(); 
+        };
+
+        window.dropTag = function(e, targetTag) {
+            e.preventDefault();
+            const group = e.currentTarget;
+            if (!group || !draggedTag || draggedTag === targetTag) return;
+
+            const fromIdx = state.tagOrder.indexOf(draggedTag);
+            const toIdx = state.tagOrder.indexOf(targetTag);
+
+            if (fromIdx > -1 && toIdx > -1) {
+                state.tagOrder.splice(fromIdx, 1);
+                state.tagOrder.splice(toIdx, 0, draggedTag);
+                saveDataToFirebase();
+                window.renderProjects();
+            }
+        };
+
         window.toggleExpandedProject = function(id) {
             if (state.expandedProjects.has(id)) state.expandedProjects.delete(id);
             else state.expandedProjects.add(id);
@@ -914,19 +956,28 @@
                     return acc;
                 }, {});
 
-                const sortedTags = Object.keys(grouped).sort((a, b) => {
-                    if (a === 'Uncategorized') return 1;
-                    if (b === 'Uncategorized') return -1;
-                    return a.localeCompare(b);
+                // Ensure state.tagOrder knows about all currently active tags
+                const currentTags = Object.keys(grouped);
+                currentTags.forEach(t => {
+                    if (!state.tagOrder.includes(t)) state.tagOrder.push(t);
+                });
+
+                // Sort the categories based on the user's custom drag-and-drop order
+                const sortedTags = currentTags.sort((a, b) => {
+                    return state.tagOrder.indexOf(a) - state.tagOrder.indexOf(b);
                 });
 
                 sortedTags.forEach(tag => {
                     const tagStyle = tag === 'Uncategorized' ? 'text-gray-500 bg-gray-100 border-gray-200' : 'text-blue-700 bg-blue-50 border-blue-200';
-                    container.innerHTML += `
-                        <div class="mt-4 mb-1 flex items-center gap-3">
-                            <span class="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md border shadow-sm ${tagStyle}">${tag}</span>
-                            <div class="h-px bg-gray-200 flex-1"></div>
-                        </div>
+                    
+                    let groupHtml = `
+                        <div class="tag-group mb-6" data-tag="${tag}" draggable="true" ondragstart="window.dragTagStart(event, '${tag}')" ondragend="window.dragTagEnd(event)" ondragover="window.dragTagOver(event)" ondrop="window.dropTag(event, '${tag}')">
+                            <div class="mb-3 flex items-center gap-3 cursor-grab opacity-80 hover:opacity-100 group/header transition-opacity" title="Drag to reorder category">
+                                <i class="fa-solid fa-grip-vertical text-gray-300 group-hover/header:text-blue-500 transition-colors"></i>
+                                <span class="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md border shadow-sm ${tagStyle}">${tag}</span>
+                                <div class="h-px bg-gray-200 flex-1 mr-4"></div>
+                            </div>
+                            <div class="flex flex-col gap-3">
                     `;
 
                     grouped[tag].forEach(p => {
@@ -950,7 +1001,7 @@
                             ` : `<div class="border-t border-gray-100 bg-gray-50/50 p-4 text-sm text-gray-400 italic">No deliverables tracked.</div>`;
                         }
 
-                        container.innerHTML += `
+                        groupHtml += `
                             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200 hover:shadow-md hover:border-blue-200">
                                 <div class="p-4 flex justify-between items-center cursor-pointer hover:bg-blue-50/30 transition-colors" onclick="window.toggleExpandedProject('${p.id}')">
                                     <div class="flex items-center gap-4">
@@ -975,6 +1026,9 @@
                             </div>
                         `;
                     });
+                    
+                    groupHtml += `</div></div>`;
+                    container.innerHTML += groupHtml;
                 });
             };
 
