@@ -988,17 +988,24 @@
                         let deliverablesHtml = '';
                         if (isExpanded) {
                             const rows = projectDeliverables.map(d => `
-                                <tr class="border-b border-gray-100 last:border-0 hover:bg-white transition-colors">
+                                <tr class="border-b border-gray-100 last:border-0 hover:bg-white transition-colors group/row">
                                     <td class="py-2 px-4 text-sm font-medium text-gray-800">${d.name}</td>
-                                    <td class="py-2 px-4 text-xs"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold">${d.status}</span></td>
-                                    <td class="py-2 px-4 text-sm text-gray-600 text-right">${formatCurrency(d.budget)}</td>
+                                    <td class="py-2 px-4 text-xs w-28"><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-bold">${d.status}</span></td>
+                                    <td class="py-2 px-4 text-sm text-gray-600 text-right w-24">${formatCurrency(d.budget)}</td>
+                                    <td class="py-2 px-4 text-right w-12">
+                                        <button onclick="window.openModal('deliverableModal', '${d.id}')" class="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 transition-colors opacity-0 group-hover/row:opacity-100"><i class="fa-solid fa-pen text-xs"></i></button>
+                                    </td>
                                 </tr>
                             `).join('');
-                            deliverablesHtml = rows ? `
+                            
+                            deliverablesHtml = `
                                 <div class="border-t border-gray-100 bg-gray-50/50 fade-in">
-                                    <table class="w-full text-left"><tbody>${rows}</tbody></table>
+                                    ${rows ? `<table class="w-full text-left"><tbody>${rows}</tbody></table>` : `<div class="p-4 text-sm text-gray-400 italic">No deliverables tracked.</div>`}
+                                    <div class="px-4 py-2 bg-gray-50/80 border-t border-gray-100">
+                                        <button onclick="window.openModal('deliverableModal', null, '${p.id}')" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 transition-colors hover:underline"><i class="fa-solid fa-plus"></i> Add Deliverable</button>
+                                    </div>
                                 </div>
-                            ` : `<div class="border-t border-gray-100 bg-gray-50/50 p-4 text-sm text-gray-400 italic">No deliverables tracked.</div>`;
+                            `;
                         }
 
                         groupHtml += `
@@ -1240,7 +1247,7 @@
         // ==========================================
         // 10. MODAL MANAGEMENT & FORM SUBMISSION
         // ==========================================
-        window.openModal = function(modalId, itemId = null) {
+        window.openModal = function(modalId, itemId = null, extraData = null) {
             document.getElementById('modalOverlay').classList.remove('hidden');
             document.getElementById(modalId).classList.remove('hidden');
 
@@ -1318,6 +1325,9 @@
                     document.getElementById('formDeliverable').reset();
                     document.getElementById('delivId').value = '';
                     document.getElementById('delivDateContainer').classList.add('hidden');
+                    if (extraData) {
+                        projSelect.value = extraData;
+                    }
                 }
             }
         };
