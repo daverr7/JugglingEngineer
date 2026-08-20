@@ -198,8 +198,11 @@
             <div id="section-projects" class="absolute inset-0 p-6 overflow-y-auto fade-in hidden">
                 <div class="flex justify-between items-center mb-6">
                     <div>
-                        <h2 class="text-2xl font-bold text-gray-800">Project Portfolio</h2>
-                        <p class="text-gray-500 text-sm">Manage active workspaces and related deliverables.</p>
+                        <div class="flex items-center gap-3">
+                            <h2 class="text-2xl font-bold text-gray-800">Project Portfolio</h2>
+                            <div class="bg-green-100 text-green-800 border border-green-200 text-xs font-extrabold px-2.5 py-1 rounded-md shadow-sm" id="projectTotalBudgetBadge"></div>
+                        </div>
+                        <p class="text-gray-500 text-sm mt-1">Manage active workspaces and related deliverables.</p>
                     </div>
                     <div class="flex items-center gap-3">
                         <div class="flex bg-gray-100/80 rounded-lg p-1 border border-gray-200/50 shadow-inner">
@@ -229,8 +232,11 @@
             <div id="section-kanban" class="absolute inset-0 p-6 overflow-x-auto fade-in hidden bg-gray-100/50">
                 <div class="flex justify-between items-center mb-6 sticky left-0">
                     <div>
-                        <h2 class="text-2xl font-bold text-gray-800">Deliverables Board</h2>
-                        <p class="text-gray-500 text-sm">Drag and drop tasks across your workflow pipeline.</p>
+                        <div class="flex items-center gap-3">
+                            <h2 class="text-2xl font-bold text-gray-800">Deliverables Board</h2>
+                            <div class="bg-green-100 text-green-800 border border-green-200 text-xs font-extrabold px-2.5 py-1 rounded-md shadow-sm" id="kanbanTotalBudgetBadge"></div>
+                        </div>
+                        <p class="text-gray-500 text-sm mt-1">Drag and drop tasks across your workflow pipeline.</p>
                     </div>
                     <div class="flex gap-3">
                         <select id="kanbanTagFilter" onchange="window.updateKanbanFilter()" class="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold shadow-sm">
@@ -948,6 +954,16 @@
             activeList.innerHTML = '';
             completedList.innerHTML = '';
 
+            // Update Total Project Active Value Badge
+            const activeProjBudget = state.deliverables
+                .filter(d => d.status !== 'Done' && !d.isArchived)
+                .reduce((sum, d) => sum + (d.budget || 0), 0);
+            
+            const projectBadge = document.getElementById('projectTotalBudgetBadge');
+            if (projectBadge) {
+                projectBadge.innerHTML = `<i class="fa-solid fa-coins mr-1"></i> Active Value: ${formatCurrency(activeProjBudget)}`;
+            }
+
             const renderGroupedProjects = (projectsToRender, container) => {
                 const grouped = projectsToRender.reduce((acc, p) => {
                     const tag = p.tag || 'Uncategorized';
@@ -1145,6 +1161,16 @@
             if (state.currentKanbanFilter !== 'All') {
                 const validProjectIds = state.projects.filter(p => p.tag === state.currentKanbanFilter).map(p => p.id);
                 filteredDeliverables = state.deliverables.filter(d => validProjectIds.includes(d.projectId));
+            }
+
+            // Update Total Kanban Active Value Badge
+            const activeKanbanBudget = filteredDeliverables
+                .filter(d => d.status !== 'Done' && !d.isArchived)
+                .reduce((sum, d) => sum + (d.budget || 0), 0);
+                
+            const kanbanBadge = document.getElementById('kanbanTotalBudgetBadge');
+            if (kanbanBadge) {
+                kanbanBadge.innerHTML = `<i class="fa-solid fa-coins mr-1"></i> Active Value: ${formatCurrency(activeKanbanBudget)}`;
             }
 
             const columnsData = [
