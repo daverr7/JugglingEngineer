@@ -958,7 +958,7 @@
                 }
 
                 board.innerHTML += `
-                    <div class="w-80 shrink-0 flex flex-col bg-white rounded-2xl p-1 border border-gray-200 shadow-sm overflow-hidden">
+                    <div class="flex-1 min-w-[280px] flex flex-col bg-white rounded-2xl p-1 border border-gray-200 shadow-sm overflow-hidden">
                         <div class="${colDef.bg} mb-2 px-4 py-3 flex justify-between items-start rounded-t-xl border-b border-gray-100">
                             <h3 class="font-bold ${colDef.headerText}">${colDef.name} <span class="ml-1 ${colDef.badgeBg} text-xs px-2 py-0.5 rounded-full font-semibold shadow-sm">${colDeliverables.length}</span></h3>
                             <div class="text-xs font-bold ${colDef.headerText} opacity-90 bg-white/60 px-2 py-1 rounded-lg border border-white shadow-sm" title="Total Value">${formatCurrency(totalBudget)}</div>
@@ -1192,14 +1192,14 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // 1. PASTE YOUR KEYS HERE
-		 const firebaseConfig = {
-			apiKey: "AIzaSyC8vFDcMsmD4frBnnR5OsC3clDXs5F39rU",
-			authDomain: "jugglingengineer-becd6.firebaseapp.com",
-			projectId: "jugglingengineer-becd6",
-			storageBucket: "jugglingengineer-becd6.firebasestorage.app",
-			messagingSenderId: "52260225231",
-			appId: "1:52260225231:web:afab29fe09f2b12603b7ba"
-		  };
+        const firebaseConfig = {
+            apiKey: "AIzaSyC8vFDcMsmD4frBnnR5OsC3clDXs5F39rU",
+            authDomain: "jugglingengineer-becd6.firebaseapp.com",
+            projectId: "jugglingengineer-becd6",
+            storageBucket: "jugglingengineer-becd6.firebasestorage.app",
+            messagingSenderId: "52260225231",
+            appId: "1:52260225231:web:afab29fe09f2b12603b7ba"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
