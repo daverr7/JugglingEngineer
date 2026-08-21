@@ -37,6 +37,10 @@
         .todo-card:active { cursor: grabbing; }
         .todo-card.dragging-todo { opacity: 0.5; border: 2px dashed #3b82f6; transform: scale(0.98); }
 
+        .proposal-card { cursor: grab; }
+        .proposal-card:active { cursor: grabbing; }
+        .proposal-card.dragging-prop { opacity: 0.5; border: 2px dashed #3b82f6; transform: scale(0.98); }
+
         /* Tag Group Dragging */
         .tag-group.dragging-tag { opacity: 0.5; border: 2px dashed #3b82f6; border-radius: 12px; padding: 4px; transform: scale(0.99); }
         .tag-group { transition: transform 0.2s; }
@@ -172,6 +176,15 @@
                         <p class="text-gray-500 text-sm">Track upcoming work and win probabilities.</p>
                     </div>
                     <div class="flex items-center gap-3">
+                        <!-- View Mode Switcher -->
+                        <div class="flex bg-gray-100/80 rounded-lg p-1 border border-gray-200/50 shadow-inner">
+                            <button onclick="window.switchProposalView('board')" id="btnPropBoard" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-white shadow-sm text-gray-800 transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-border-all"></i> Board
+                            </button>
+                            <button onclick="window.switchProposalView('table')" id="btnPropTable" class="px-3 py-1.5 text-xs font-semibold rounded-md text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all flex items-center gap-1.5">
+                                <i class="fa-solid fa-table-list"></i> Table
+                            </button>
+                        </div>
                         <select id="fiscalYearSelect" class="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 font-semibold shadow-sm" onchange="window.renderProposals()"></select>
                         <button onclick="window.openModal('proposalModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm flex items-center gap-2">
                             <i class="fa-solid fa-plus"></i> New Proposal
@@ -181,7 +194,11 @@
 
                 <div class="grid grid-cols-4 gap-4 mb-6" id="proposalMetrics"></div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
+                <!-- Proposal Board View (Cards Pipeline) -->
+                <div id="proposalBoardView" class="flex gap-4 overflow-x-auto flex-1 pb-4 min-h-[400px]"></div>
+
+                <!-- Proposal Table View -->
+                <div id="proposalTableView" class="hidden bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex-1 flex flex-col">
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
@@ -293,6 +310,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
                         <select id="propRole" class="w-full px-4 py-2 border rounded-xl">
                             <option value="Lead">Lead</option>
+                            <option value="Co-Lead">Co-Lead</option>
                             <option value="Support">Support</option>
                             <option value="">N/A</option>
                         </select>
@@ -443,7 +461,8 @@
             activeSection: 'todos',
             expandedProjects: new Set(),
             currentSort: { column: 'seq', direction: 'asc' },
-            currentKanbanFilter: 'All'
+            currentKanbanFilter: 'All',
+            proposalView: 'board' // 'board' or 'table'
         };
 
         const projectColors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
@@ -499,7 +518,8 @@
                 { id: 'proj2', name: 'Example Project Beta', status: 'Active', tag: 'Water Supply', color: '#10b981', completedDate: '' }
             ];
             state.proposals = [
-                { id: 'prop1', seq: 1, name: 'Initech Server Migration', role: 'Lead', status: 'Pending Decision', budget: 45000, winProb: 50, year: currentYear, notes: 'Awaiting client signature' }
+                { id: 'prop1', seq: 1, name: 'Initech Server Migration', role: 'Lead', status: 'Pending Decision', budget: 45000, winProb: 50, year: currentYear, notes: 'Awaiting client signature' },
+                { id: 'prop2', seq: 2, name: 'Water Plant Expansion', role: 'Support', status: 'In-Progress', budget: 85000, winProb: 75, year: currentYear, notes: 'Drafting cost estimate' }
             ];
             state.deliverables = [
                 { id: 'deliv1', projectId: 'proj1', name: 'Phase 1 Report', status: 'In-Progress', budget: 5000, isArchived: false, completedDate: '', order: 0 },
@@ -767,7 +787,6 @@
             const newBucket = column.dataset.bucket;
             const draggableElements = [...column.querySelectorAll('.todo-card:not(.dragging-todo)')];
             
-            // Calculate geometric insertion point
             let afterElement = draggableElements.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
                 const offset = e.clientY - box.top - box.height / 2;
@@ -786,7 +805,6 @@
             let itemsInBucket = state.todos.filter(t => t.bucket === newBucket && !t.isArchived && t.id !== draggedTodoId);
             itemsInBucket.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-            // Re-insert dragged item
             if (afterElement) {
                 const insertId = afterElement.id.replace('todo_', '');
                 const insertIndex = itemsInBucket.findIndex(t => t.id === insertId);
@@ -795,7 +813,6 @@
                 itemsInBucket.push(todo);
             }
 
-            // Clean up order indices
             itemsInBucket.forEach((t, index) => { t.order = index; });
 
             saveDataToFirebase();
@@ -895,6 +912,11 @@
             });
         }
 
+        window.switchProposalView = function(view) {
+            state.proposalView = view;
+            window.renderProposals();
+        };
+
         window.sortProposals = function(col) {
             if (state.currentSort.column === col) {
                 state.currentSort.direction = state.currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -905,60 +927,97 @@
             window.renderProposals();
         };
 
+        let draggedPropId = null;
+        window.dragPropStart = function(e) {
+            draggedPropId = e.target.id.replace('propcard_', '');
+            e.target.classList.add('dragging-prop');
+            e.dataTransfer.effectAllowed = 'move';
+        };
+        window.dragPropEnd = function(e) { e.target.classList.remove('dragging-prop'); };
+        window.dragPropOver = function(e) { e.preventDefault(); };
+
+        window.dropPropItem = function(e) {
+            e.preventDefault();
+            const column = e.target.closest('.prop-column');
+            if (!column || !draggedPropId) return;
+            const newStatus = column.dataset.status;
+
+            const draggableElements = [...column.querySelectorAll('.proposal-card:not(.dragging-prop)')];
+            
+            let afterElement = draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = e.clientY - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+
+            const prop = state.proposals.find(p => p.id === draggedPropId);
+            if (!prop) return;
+
+            prop.status = newStatus;
+
+            const currentYear = document.getElementById('fiscalYearSelect').value;
+            let itemsInCol = state.proposals.filter(p => p.status === newStatus && p.year === currentYear && p.id !== draggedPropId);
+            itemsInCol.sort((a, b) => (a.order ?? a.seq ?? 0) - (b.order ?? b.seq ?? 0));
+
+            if (afterElement) {
+                const insertId = afterElement.id.replace('propcard_', '');
+                const insertIndex = itemsInCol.findIndex(p => p.id === insertId);
+                itemsInCol.splice(insertIndex, 0, prop);
+            } else {
+                itemsInCol.push(prop);
+            }
+
+            itemsInCol.forEach((p, idx) => {
+                p.order = idx;
+            });
+
+            saveDataToFirebase();
+            window.renderProposals();
+            window.renderKanban();
+        };
+
         window.renderProposals = function() {
             const currentYear = document.getElementById('fiscalYearSelect').value;
             const yearProps = state.proposals.filter(p => p.year === currentYear);
             
-            yearProps.sort((a, b) => {
-                let valA = a[state.currentSort.column]; 
-                let valB = b[state.currentSort.column];
-                if(typeof valA === 'string') valA = valA.toLowerCase();
-                if(typeof valB === 'string') valB = valB.toLowerCase();
-                if (valA < valB) return state.currentSort.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return state.currentSort.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
+            // Toggle view button highlights
+            const btnBoard = document.getElementById('btnPropBoard');
+            const btnTable = document.getElementById('btnPropTable');
+            const boardContainer = document.getElementById('proposalBoardView');
+            const tableContainer = document.getElementById('proposalTableView');
 
-            const tbody = document.getElementById('proposalsTableBody');
-            tbody.innerHTML = '';
+            if (state.proposalView === 'board') {
+                btnBoard.className = 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white shadow-sm text-gray-800 transition-all flex items-center gap-1.5';
+                btnTable.className = 'px-3 py-1.5 text-xs font-semibold rounded-md text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all flex items-center gap-1.5';
+                boardContainer.classList.remove('hidden');
+                tableContainer.classList.add('hidden');
+            } else {
+                btnTable.className = 'px-3 py-1.5 text-xs font-semibold rounded-md bg-white shadow-sm text-gray-800 transition-all flex items-center gap-1.5';
+                btnBoard.className = 'px-3 py-1.5 text-xs font-semibold rounded-md text-gray-600 hover:text-gray-800 hover:bg-white/50 transition-all flex items-center gap-1.5';
+                tableContainer.classList.remove('hidden');
+                boardContainer.classList.add('hidden');
+            }
+
+            // Calculations
             let totalPending = 0, totalWon = 0, totalLost = 0;
-
             yearProps.forEach(p => {
                 const b = parseFloat(p.budget) || 0;
-                if (p.status.includes('Pending')) totalPending += b;
+                if (p.status.includes('Pending') || p.status === 'Upcoming' || p.status === 'In-Progress') totalPending += b;
                 if (p.status === 'Win') totalWon += b;
                 if (p.status === 'Loss') totalLost += b;
-
-                let statusBadge = '';
-                if(p.status === 'Win') statusBadge = 'bg-green-100 text-green-800';
-                else if(p.status === 'Loss') statusBadge = 'bg-red-100 text-red-800';
-                else if(p.status.includes('Pending')) statusBadge = 'bg-yellow-100 text-yellow-800';
-                else statusBadge = 'bg-gray-100 text-gray-800';
-
-                tbody.innerHTML += `
-                    <tr class="hover:bg-blue-50/50 transition-colors group">
-                        <td class="p-4 text-sm text-gray-500 font-medium">${p.seq || '-'}</td>
-                        <td class="p-4">
-                            <div class="font-bold text-gray-800">${p.name}</div>
-                            ${p.notes ? `<div class="text-xs text-gray-400 mt-1 truncate max-w-xs"><i class="fa-regular fa-comment-dots mr-1"></i>${p.notes}</div>` : ''}
-                        </td>
-                        <td class="p-4 text-sm text-gray-600">${p.role || '-'}</td>
-                        <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${statusBadge}">${p.status}</span></td>
-                        <td class="p-4 text-right font-medium text-gray-700">${formatCurrency(p.budget)}</td>
-                        <td class="p-4 text-center text-sm font-semibold text-gray-600">${p.winProb || 0}%</td>
-                        <td class="p-4 text-center">
-                            <button onclick="window.openModal('proposalModal', '${p.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100"><i class="fa-solid fa-pen"></i></button>
-                        </td>
-                    </tr>
-                `;
             });
 
+            // Update Metrics Cards
             const goal = state.fiscalGoals[currentYear] || 0;
             const progressPct = goal > 0 ? Math.min(100, (totalWon / goal) * 100) : 0;
 
             document.getElementById('proposalMetrics').innerHTML = `
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
-                    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Pending Value</div>
+                    <div class="text-xs font-bold text-gray-500 uppercase mb-1">Pipeline / Pending Value</div>
                     <div class="text-xl font-extrabold text-yellow-600">${formatCurrency(totalPending)}</div>
                 </div>
                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
@@ -979,6 +1038,91 @@
                     <progress value="${progressPct}" max="100" class="w-full h-1.5 mt-2 rounded-full overflow-hidden bg-blue-900/50"></progress>
                 </div>
             `;
+
+            // RENDER TABLE VIEW
+            yearProps.sort((a, b) => {
+                let valA = a[state.currentSort.column]; 
+                let valB = b[state.currentSort.column];
+                if(typeof valA === 'string') valA = valA.toLowerCase();
+                if(typeof valB === 'string') valB = valB.toLowerCase();
+                if (valA < valB) return state.currentSort.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return state.currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            const tbody = document.getElementById('proposalsTableBody');
+            tbody.innerHTML = '';
+
+            yearProps.forEach(p => {
+                let statusBadge = '';
+                if(p.status === 'Win') statusBadge = 'bg-green-100 text-green-800';
+                else if(p.status === 'Loss') statusBadge = 'bg-red-100 text-red-800';
+                else if(p.status.includes('Pending')) statusBadge = 'bg-yellow-100 text-yellow-800';
+                else if(p.status === 'In-Progress') statusBadge = 'bg-blue-100 text-blue-800';
+                else statusBadge = 'bg-gray-100 text-gray-800';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50/50 transition-colors group">
+                        <td class="p-4 text-sm text-gray-500 font-medium">${p.seq || '-'}</td>
+                        <td class="p-4">
+                            <div class="font-bold text-gray-800">${p.name}</div>
+                            ${p.notes ? `<div class="text-xs text-gray-400 mt-1 truncate max-w-xs"><i class="fa-regular fa-comment-dots mr-1"></i>${p.notes}</div>` : ''}
+                        </td>
+                        <td class="p-4 text-sm text-gray-600">${p.role || '-'}</td>
+                        <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${statusBadge}">${p.status}</span></td>
+                        <td class="p-4 text-right font-medium text-gray-700">${formatCurrency(p.budget)}</td>
+                        <td class="p-4 text-center text-sm font-semibold text-gray-600">${p.winProb || 0}%</td>
+                        <td class="p-4 text-center">
+                            <button onclick="window.openModal('proposalModal', '${p.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100"><i class="fa-solid fa-pen"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // RENDER BOARD VIEW
+            boardContainer.innerHTML = '';
+            const statusCols = [
+                { id: 'Upcoming', name: 'Upcoming', bg: 'bg-gray-50', header: 'text-gray-700', badge: 'bg-gray-200' },
+                { id: 'In-Progress', name: 'In-Progress', bg: 'bg-blue-50/50', header: 'text-blue-800', badge: 'bg-blue-200' },
+                { id: 'Pending Decision', name: 'Pending Decision', bg: 'bg-yellow-50/50', header: 'text-yellow-800', badge: 'bg-yellow-200' },
+                { id: 'Win', name: 'Win', bg: 'bg-green-50/50', header: 'text-green-800', badge: 'bg-green-200' },
+                { id: 'Loss', name: 'Loss', bg: 'bg-red-50/50', header: 'text-red-800', badge: 'bg-red-200' }
+            ];
+
+            statusCols.forEach(col => {
+                const colProps = yearProps.filter(p => p.status === col.id);
+                colProps.sort((a, b) => (a.order ?? a.seq ?? 0) - (b.order ?? b.seq ?? 0));
+                const colBudgetTotal = colProps.reduce((sum, p) => sum + (parseFloat(p.budget) || 0), 0);
+
+                let cardsHtml = colProps.map(p => `
+                    <div id="propcard_${p.id}" draggable="true" ondragstart="window.dragPropStart(event)" ondragend="window.dragPropEnd(event)" class="proposal-card bg-white p-3.5 rounded-xl shadow-sm border border-gray-200 hover:border-blue-400 hover:-translate-y-1 hover:shadow-md transform transition-all duration-200 group relative">
+                        <button onclick="window.openModal('proposalModal', '${p.id}')" class="absolute top-2 right-2 text-gray-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 shadow-sm border border-gray-100 hover:bg-blue-50 p-1.5 rounded-lg z-10"><i class="fa-solid fa-pen text-xs"></i></button>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-[10px] font-extrabold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">#${p.seq || '-'}</span>
+                            ${p.role ? `<span class="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">${p.role}</span>` : ''}
+                        </div>
+                        <h4 class="text-sm font-bold text-gray-800 leading-snug mb-2 pr-6">${p.name}</h4>
+                        <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 text-xs">
+                            <span class="font-bold text-green-700">${formatCurrency(p.budget)}</span>
+                            <span class="font-semibold text-gray-500" title="Win Probability"><i class="fa-solid fa-crosshairs text-blue-500 mr-1"></i>${p.winProb || 0}%</span>
+                        </div>
+                        ${p.notes ? `<div class="text-[11px] text-gray-400 mt-2 truncate"><i class="fa-regular fa-comment-dots mr-1"></i>${p.notes}</div>` : ''}
+                    </div>
+                `).join('');
+
+                boardContainer.innerHTML += `
+                    <div class="flex-1 min-w-[260px] flex flex-col bg-white rounded-2xl p-1 border border-gray-200 shadow-sm overflow-hidden">
+                        <div class="${col.bg} mb-2 px-3.5 py-3 flex justify-between items-center rounded-t-xl border-b border-gray-100">
+                            <h3 class="font-bold text-sm ${col.header}">${col.name} <span class="ml-1 ${col.badge} text-xs px-2 py-0.5 rounded-full font-semibold">${colProps.length}</span></h3>
+                            <span class="text-xs font-extrabold ${col.header}">${formatCurrency(colBudgetTotal)}</span>
+                        </div>
+                        <div class="prop-column flex-1 flex flex-col gap-3 overflow-y-auto min-h-[150px] p-2 bg-gray-50/30" data-status="${col.id}" ondragover="window.dragPropOver(event)" ondrop="window.dropPropItem(event)">
+                            ${cardsHtml}
+                            ${colProps.length === 0 ? `<div class="text-center text-xs text-gray-400 italic py-8">Drop proposals here</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
         };
 
         // ==========================================
@@ -1038,7 +1182,6 @@
             activeList.innerHTML = '';
             completedList.innerHTML = '';
 
-            // Update Total Project Active Value Badge
             const activeProjBudget = state.deliverables
                 .filter(d => d.status !== 'Done' && !d.isArchived)
                 .reduce((sum, d) => sum + (d.budget || 0), 0);
@@ -1056,13 +1199,11 @@
                     return acc;
                 }, {});
 
-                // Ensure state.tagOrder knows about all currently active tags
                 const currentTags = Object.keys(grouped);
                 currentTags.forEach(t => {
                     if (!state.tagOrder.includes(t)) state.tagOrder.push(t);
                 });
 
-                // Sort the categories based on the user's custom drag-and-drop order
                 const sortedTags = currentTags.sort((a, b) => {
                     return state.tagOrder.indexOf(a) - state.tagOrder.indexOf(b);
                 });
@@ -1168,7 +1309,6 @@
             const newStatus = column.dataset.status;
             const draggableElements = [...column.querySelectorAll('.kanban-card:not(.dragging)')];
             
-            // Calculate geometric insertion point
             let afterElement = draggableElements.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
                 const offset = e.clientY - box.top - box.height / 2;
@@ -1182,7 +1322,6 @@
             const deliv = state.deliverables.find(d => d.id === draggedDeliverableId);
             if (!deliv) return;
             
-            // Date Completion Tracking
             if (deliv.status !== newStatus && newStatus === 'Done' && !deliv.completedDate) {
                 const today = new Date();
                 deliv.completedDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
@@ -1193,7 +1332,6 @@
             let itemsInColumn = state.deliverables.filter(d => d.status === newStatus && !d.isArchived && d.id !== draggedDeliverableId);
             itemsInColumn.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-            // Re-insert dragged item
             if (afterElement) {
                 const insertId = afterElement.id.replace('card_', '');
                 const insertIndex = itemsInColumn.findIndex(d => d.id === insertId);
@@ -1202,7 +1340,6 @@
                 itemsInColumn.push(deliv);
             }
 
-            // Clean up order indices
             itemsInColumn.forEach((d, index) => { d.order = index; });
 
             saveDataToFirebase();
@@ -1228,11 +1365,9 @@
             const board = document.getElementById('kanbanBoard');
             board.innerHTML = '';
 
-            // Update Tag Filter
             const filterSelect = document.getElementById('kanbanTagFilter');
             const tags = [...new Set(state.projects.map(p => p.tag).filter(Boolean))].sort();
             
-            // Reset filter if active tag was deleted
             if (state.currentKanbanFilter !== 'All' && !tags.includes(state.currentKanbanFilter)) {
                 state.currentKanbanFilter = 'All'; 
             }
@@ -1240,14 +1375,12 @@
             filterSelect.innerHTML = `<option value="All">All Projects</option>` + 
                 tags.map(t => `<option value="${t}" ${t === state.currentKanbanFilter ? 'selected' : ''}>${t}</option>`).join('');
 
-            // Apply active filter
             let filteredDeliverables = state.deliverables;
             if (state.currentKanbanFilter !== 'All') {
                 const validProjectIds = state.projects.filter(p => p.tag === state.currentKanbanFilter).map(p => p.id);
                 filteredDeliverables = state.deliverables.filter(d => validProjectIds.includes(d.projectId));
             }
 
-            // Update Total Kanban Active Value Badge
             const activeKanbanBudget = filteredDeliverables
                 .filter(d => d.status !== 'Done' && !d.isArchived)
                 .reduce((sum, d) => sum + (d.budget || 0), 0);
@@ -1264,10 +1397,9 @@
                 { id: 'Done', name: 'Done', color: 'green', bg: 'bg-green-50/50', headerText: 'text-green-800', badgeBg: 'bg-green-200 text-green-800' }
             ];
 
-            // Calculate pending pipeline values
             let pendingExpectedValue = 0, pendingCount = 0;
             state.proposals.forEach(p => {
-                if(p.status === 'Pending Decision' || p.status === 'Pending') {
+                if(p.status === 'Pending Decision' || p.status === 'Pending' || p.status === 'In-Progress') {
                     pendingCount++;
                     pendingExpectedValue += (p.budget || 0) * ((p.winProb || 0) / 100);
                 }
@@ -1279,7 +1411,6 @@
                 
                 let activeCards = '', archivedCards = '', totalBudget = 0;
 
-                // Add ghost pipeline value to backlog total
                 if (colDef.id === 'Backlog' && state.currentKanbanFilter === 'All') {
                     totalBudget += pendingExpectedValue;
                 }
@@ -1318,7 +1449,6 @@
 
                 let columnInnerHtml = activeCards;
                 
-                // Inject visual ghost pipeline block
                 if (colDef.id === 'Backlog' && pendingCount > 0 && state.currentKanbanFilter === 'All') {
                     columnInnerHtml = `
                         <div class="bg-gradient-to-br from-indigo-50 to-blue-50 p-4 rounded-xl border-2 border-indigo-200 border-dashed mb-3 flex flex-col items-center justify-center text-center shadow-sm hover:border-indigo-300 transition-colors">
@@ -1330,7 +1460,6 @@
                     ` + columnInnerHtml;
                 }
 
-                // Inject archive block
                 if (colDef.id === 'Done' && archivedCards !== '') {
                     columnInnerHtml += `
                         <div class="mt-4 pt-4 border-t-2 border-gray-200 border-dashed relative">
@@ -1395,7 +1524,6 @@
                 document.getElementById('projectModalTitle').innerText = isEdit ? 'Edit Project' : 'Add Project';
                 document.getElementById('btnDeleteProj').classList.toggle('hidden', !isEdit);
                 
-                // Populate tags list to prevent typos
                 const existingTags = [...new Set(state.projects.map(p => p.tag).filter(Boolean))];
                 document.getElementById('existingTagsList').innerHTML = existingTags.map(t => `<option value="${t}">`).join('');
 
@@ -1461,6 +1589,7 @@
         document.getElementById('formProposal').addEventListener('submit', (e) => {
             e.preventDefault();
             const existingId = document.getElementById('propId').value;
+            const existingProp = state.proposals.find(p => p.id === existingId);
             const data = {
                 id: existingId || 'prop_' + Date.now(),
                 seq: parseInt(document.getElementById('propSeq').value) || 1,
@@ -1470,7 +1599,8 @@
                 budget: parseFloat(document.getElementById('propBudget').value) || 0,
                 winProb: parseInt(document.getElementById('propWinProb').value) || 0,
                 year: document.getElementById('propYear').value,
-                notes: document.getElementById('propNotes').value
+                notes: document.getElementById('propNotes').value,
+                order: existingProp ? (existingProp.order ?? 0) : state.proposals.filter(p => p.status === document.getElementById('propStatus').value && p.year === document.getElementById('propYear').value).length
             };
             
             if (existingId) {
