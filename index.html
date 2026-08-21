@@ -672,6 +672,43 @@
             }
         };
 
+        window.startEditTodo = function(id, event) {
+            if (event) event.stopPropagation();
+            const todo = state.todos.find(t => t.id === id);
+            if (!todo) return;
+
+            const textSpan = document.getElementById(`todo_text_${id}`);
+            if (!textSpan) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = todo.text;
+            input.className = 'flex-1 text-sm font-medium text-gray-900 px-2 py-1 bg-white border-2 border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 shadow-inner';
+
+            const saveEdit = () => {
+                const newText = input.value.trim();
+                if (newText && newText !== todo.text) {
+                    todo.text = newText;
+                    saveDataToFirebase();
+                }
+                window.renderTodos();
+            };
+
+            input.addEventListener('blur', saveEdit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    window.renderTodos();
+                }
+            });
+
+            textSpan.replaceWith(input);
+            input.focus();
+            input.select();
+        };
+
         window.deleteTodo = function(id) {
             state.todos = state.todos.filter(t => t.id !== id);
             saveDataToFirebase();
@@ -752,7 +789,7 @@
                         <button onclick="window.toggleTodoCompletion('${t.id}')" class="mt-0.5 text-gray-300 hover:text-green-500 transition-colors shrink-0">
                             <i class="fa-regular fa-circle text-xl"></i>
                         </button>
-                        <span class="text-sm font-medium text-gray-800 flex-1 leading-tight">${t.text}</span>
+                        <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm font-medium text-gray-800 flex-1 leading-tight select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
                         <button onclick="window.deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded">
                             <i class="fa-solid fa-xmark text-sm"></i>
                         </button>
@@ -780,7 +817,7 @@
                         <button onclick="window.toggleTodoCompletion('${t.id}')" class="text-green-500 hover:text-gray-400 transition-colors shrink-0">
                             <i class="fa-solid fa-circle-check text-lg"></i>
                         </button>
-                        <span class="text-sm text-gray-500 line-through flex-1">${t.text}</span>
+                        <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm text-gray-500 line-through flex-1 select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
                         <button onclick="window.deleteTodo('${t.id}')" class="text-gray-400 hover:text-red-500 p-1">
                             <i class="fa-solid fa-trash text-xs"></i>
                         </button>
