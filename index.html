@@ -694,7 +694,19 @@
         window.toggleTodoCompletion = function(id) {
             const todo = state.todos.find(t => t.id === id);
             if(todo) {
-                todo.isCompleted = !todo.isCompleted;
+                if (!todo.isWaiting && !todo.isCompleted) {
+                    // State 1 -> State 2: Waiting
+                    todo.isWaiting = true;
+                    todo.isCompleted = false;
+                } else if (todo.isWaiting) {
+                    // State 2 -> State 3: Completed
+                    todo.isWaiting = false;
+                    todo.isCompleted = true;
+                } else {
+                    // State 3 -> State 1: Active To Do
+                    todo.isCompleted = false;
+                    todo.isWaiting = false;
+                }
                 saveDataToFirebase();
                 window.renderTodos();
             }
@@ -836,24 +848,43 @@
 
             buckets.forEach(bucket => {
                 const unarchivedTasks = state.todos.filter(t => t.bucket === bucket.id && !t.isArchived);
-                let cardsHtml = unarchivedTasks.map(t => `
-                    <div id="todo_${t.id}" draggable="true" ondragstart="window.dragTodoStart(event)" ondragend="window.dragTodoEnd(event)" class="todo-card group flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100 border-l-4 ${bucket.accent} hover:-translate-y-1 hover:shadow-md transform transition-all duration-200 ${t.isCompleted ? 'bg-gray-50/80' : ''}">
-                        <button onclick="window.toggleTodoCompletion('${t.id}')" class="mt-0.5 ${t.isCompleted ? 'text-green-500 hover:text-gray-400' : 'text-gray-300 hover:text-green-500'} transition-colors shrink-0">
-                            <i class="${t.isCompleted ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle'} text-xl"></i>
-                        </button>
-                        <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm font-medium ${t.isCompleted ? 'text-gray-400 line-through' : 'text-gray-800'} flex-1 leading-tight select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
-                        <div class="flex items-center gap-1">
-                            ${t.isCompleted ? `
-                                <button onclick="window.archiveTodo('${t.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-1 bg-gray-50 hover:bg-blue-50 rounded" title="Archive Task">
-                                    <i class="fa-solid fa-box-archive text-xs"></i>
-                                </button>
-                            ` : ''}
-                            <button onclick="window.deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded" title="Delete Task">
-                                <i class="fa-solid fa-xmark text-sm"></i>
+                let cardsHtml = unarchivedTasks.map(t => {
+                    let iconClass = 'fa-regular fa-circle text-gray-300 hover:text-amber-500';
+                    let cardBgClass = '';
+                    let textClass = 'text-gray-800';
+                    let badgeHtml = '';
+
+                    if (t.isWaiting) {
+                        iconClass = 'fa-solid fa-clock text-amber-500 hover:text-green-500';
+                        cardBgClass = 'bg-amber-50/60 border-amber-200';
+                        textClass = 'text-amber-900';
+                        badgeHtml = `<span class="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 shrink-0">Waiting</span>`;
+                    } else if (t.isCompleted) {
+                        iconClass = 'fa-solid fa-circle-check text-green-500 hover:text-gray-400';
+                        cardBgClass = 'bg-gray-50/80';
+                        textClass = 'text-gray-400 line-through';
+                    }
+
+                    return `
+                        <div id="todo_${t.id}" draggable="true" ondragstart="window.dragTodoStart(event)" ondragend="window.dragTodoEnd(event)" class="todo-card group flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100 border-l-4 ${bucket.accent} hover:-translate-y-1 hover:shadow-md transform transition-all duration-200 ${cardBgClass}">
+                            <button onclick="window.toggleTodoCompletion('${t.id}')" class="mt-0.5 transition-colors shrink-0" title="Click to cycle: To Do -> Waiting -> Done">
+                                <i class="${iconClass} text-xl"></i>
                             </button>
+                            <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm font-medium ${textClass} flex-1 leading-tight select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
+                            ${badgeHtml}
+                            <div class="flex items-center gap-1">
+                                ${t.isCompleted ? `
+                                    <button onclick="window.archiveTodo('${t.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-1 bg-gray-50 hover:bg-blue-50 rounded" title="Archive Task">
+                                        <i class="fa-solid fa-box-archive text-xs"></i>
+                                    </button>
+                                ` : ''}
+                                <button onclick="window.deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded" title="Delete Task">
+                                    <i class="fa-solid fa-xmark text-sm"></i>
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
 
                 activeBoard.innerHTML += `
                     <div class="flex-1 flex flex-col bg-white rounded-2xl overflow-hidden border ${bucket.border} shadow-sm">
