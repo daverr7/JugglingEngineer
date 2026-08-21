@@ -86,7 +86,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-extrabold tracking-tight text-gray-900 leading-tight">The Juggling Engineer</h1>
-                    <p class="text-[11px] text-gray-500 font-semibold uppercase tracking-wider" id="workspaceTitle">Workspace: Default</p>
+                    <p class="text-[11px] text-gray-500 font-semibold tracking-wider" id="workspaceTitle">Workspace: Default</p>
                 </div>
             </div>
             
@@ -154,8 +154,13 @@
                 <div id="todoActiveBoard" class="flex gap-4 mb-8 min-h-[300px]"></div>
 
                 <div class="mt-4 pt-6 border-t-2 border-gray-200 border-dashed relative">
-                    <div class="absolute -top-3 left-6 bg-gray-100 px-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Completed / Archived</div>
-                    <div id="todoArchiveList" class="flex flex-col gap-2 max-w-3xl opacity-70"></div>
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="bg-gray-100 px-3 py-1 rounded text-xs font-bold text-gray-500 uppercase tracking-wider">Completed / Archived</div>
+                        <button id="btnDeleteAllArchived" onclick="window.deleteAllArchivedTodos()" class="text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 hidden border border-red-200">
+                            <i class="fa-solid fa-trash-can"></i> Delete All Archived
+                        </button>
+                    </div>
+                    <div id="todoArchiveList" class="flex flex-col gap-2 max-w-3xl opacity-80"></div>
                 </div>
             </div>
 
@@ -658,7 +663,8 @@
                 text: text,
                 bucket: bucket,
                 isCompleted: false,
-                order: state.todos.filter(t => t.bucket === bucket).length
+                isArchived: false,
+                order: state.todos.filter(t => t.bucket === bucket && !t.isArchived).length
             });
             document.getElementById('newTodoText').value = '';
             saveDataToFirebase();
@@ -672,6 +678,33 @@
                 saveDataToFirebase();
                 window.renderTodos();
             }
+        };
+
+        window.archiveTodo = function(id) {
+            const todo = state.todos.find(t => t.id === id);
+            if(todo) {
+                todo.isArchived = true;
+                saveDataToFirebase();
+                window.renderTodos();
+            }
+        };
+
+        window.unarchiveTodo = function(id) {
+            const todo = state.todos.find(t => t.id === id);
+            if(todo) {
+                todo.isArchived = false;
+                saveDataToFirebase();
+                window.renderTodos();
+            }
+        };
+
+        window.deleteAllArchivedTodos = function() {
+            const count = state.todos.filter(t => t.isArchived).length;
+            if (count === 0) return;
+            state.todos = state.todos.filter(t => !t.isArchived);
+            saveDataToFirebase();
+            window.renderTodos();
+            window.showToast(`Deleted ${count} archived task${count > 1 ? 's' : ''}`);
         };
 
         window.startEditTodo = function(id, event) {
@@ -750,7 +783,7 @@
             
             todo.bucket = newBucket;
             
-            let itemsInBucket = state.todos.filter(t => t.bucket === newBucket && !t.isCompleted && t.id !== draggedTodoId);
+            let itemsInBucket = state.todos.filter(t => t.bucket === newBucket && !t.isArchived && t.id !== draggedTodoId);
             itemsInBucket.sort((a, b) => (a.order || 0) - (b.order || 0));
 
             // Re-insert dragged item
@@ -785,16 +818,23 @@
             state.todos.sort((a, b) => (a.order || 0) - (b.order || 0));
 
             buckets.forEach(bucket => {
-                const activeTasks = state.todos.filter(t => t.bucket === bucket.id && !t.isCompleted);
-                let cardsHtml = activeTasks.map(t => `
-                    <div id="todo_${t.id}" draggable="true" ondragstart="window.dragTodoStart(event)" ondragend="window.dragTodoEnd(event)" class="todo-card group flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100 border-l-4 ${bucket.accent} hover:-translate-y-1 hover:shadow-md transform transition-all duration-200">
-                        <button onclick="window.toggleTodoCompletion('${t.id}')" class="mt-0.5 text-gray-300 hover:text-green-500 transition-colors shrink-0">
-                            <i class="fa-regular fa-circle text-xl"></i>
+                const unarchivedTasks = state.todos.filter(t => t.bucket === bucket.id && !t.isArchived);
+                let cardsHtml = unarchivedTasks.map(t => `
+                    <div id="todo_${t.id}" draggable="true" ondragstart="window.dragTodoStart(event)" ondragend="window.dragTodoEnd(event)" class="todo-card group flex items-start gap-3 bg-white p-3 rounded-lg shadow-sm border border-gray-100 border-l-4 ${bucket.accent} hover:-translate-y-1 hover:shadow-md transform transition-all duration-200 ${t.isCompleted ? 'bg-gray-50/80' : ''}">
+                        <button onclick="window.toggleTodoCompletion('${t.id}')" class="mt-0.5 ${t.isCompleted ? 'text-green-500 hover:text-gray-400' : 'text-gray-300 hover:text-green-500'} transition-colors shrink-0">
+                            <i class="${t.isCompleted ? 'fa-solid fa-circle-check' : 'fa-regular fa-circle'} text-xl"></i>
                         </button>
-                        <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm font-medium text-gray-800 flex-1 leading-tight select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
-                        <button onclick="window.deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded">
-                            <i class="fa-solid fa-xmark text-sm"></i>
-                        </button>
+                        <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm font-medium ${t.isCompleted ? 'text-gray-400 line-through' : 'text-gray-800'} flex-1 leading-tight select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
+                        <div class="flex items-center gap-1">
+                            ${t.isCompleted ? `
+                                <button onclick="window.archiveTodo('${t.id}')" class="text-gray-400 hover:text-blue-600 transition-colors p-1 bg-gray-50 hover:bg-blue-50 rounded" title="Archive Task">
+                                    <i class="fa-solid fa-box-archive text-xs"></i>
+                                </button>
+                            ` : ''}
+                            <button onclick="window.deleteTodo('${t.id}')" class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity p-1 bg-gray-50 hover:bg-red-50 rounded" title="Delete Task">
+                                <i class="fa-solid fa-xmark text-sm"></i>
+                            </button>
+                        </div>
                     </div>
                 `).join('');
 
@@ -802,31 +842,36 @@
                     <div class="flex-1 flex flex-col bg-white rounded-2xl overflow-hidden border ${bucket.border} shadow-sm">
                         <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                             <h3 class="font-bold text-sm px-3 py-1 rounded-full ${bucket.header}">${bucket.name}</h3>
-                            <span class="text-gray-400 text-xs font-bold">${activeTasks.length}</span>
+                            <span class="text-gray-400 text-xs font-bold">${unarchivedTasks.length}</span>
                         </div>
                         <div class="todo-column flex-1 overflow-y-auto p-3 flex flex-col gap-3 ${bucket.bg}" data-bucket="${bucket.id}" ondragover="window.dragTodoOver(event)" ondrop="window.dropTodoItem(event)">
                             ${cardsHtml}
-                            ${activeTasks.length === 0 ? `<div class="text-center text-xs text-gray-400 italic py-6">Drop tasks here</div>` : ''}
+                            ${unarchivedTasks.length === 0 ? `<div class="text-center text-xs text-gray-400 italic py-6">Drop tasks here</div>` : ''}
                         </div>
                     </div>
                 `;
             });
 
-            const completedTasks = state.todos.filter(t => t.isCompleted);
-            completedTasks.forEach(t => {
+            const archivedTasks = state.todos.filter(t => t.isArchived);
+            const btnDeleteAll = document.getElementById('btnDeleteAllArchived');
+            if (btnDeleteAll) {
+                btnDeleteAll.classList.toggle('hidden', archivedTasks.length === 0);
+            }
+
+            archivedTasks.forEach(t => {
                 archiveList.innerHTML += `
                     <div class="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                        <button onclick="window.toggleTodoCompletion('${t.id}')" class="text-green-500 hover:text-gray-400 transition-colors shrink-0">
-                            <i class="fa-solid fa-circle-check text-lg"></i>
+                        <button onclick="window.unarchiveTodo('${t.id}')" class="text-blue-500 hover:text-blue-700 transition-colors shrink-0" title="Unarchive Task">
+                            <i class="fa-solid fa-box-open text-base"></i>
                         </button>
                         <span id="todo_text_${t.id}" ondblclick="window.startEditTodo('${t.id}', event)" title="Double-click to edit text" class="text-sm text-gray-500 line-through flex-1 select-none cursor-pointer hover:text-blue-600 transition-colors">${t.text}</span>
-                        <button onclick="window.deleteTodo('${t.id}')" class="text-gray-400 hover:text-red-500 p-1">
+                        <button onclick="window.deleteTodo('${t.id}')" class="text-gray-400 hover:text-red-500 p-1" title="Delete Task">
                             <i class="fa-solid fa-trash text-xs"></i>
                         </button>
                     </div>
                 `;
             });
-            if(completedTasks.length === 0) archiveList.innerHTML = `<div class="text-sm text-gray-400 italic">No completed tasks yet.</div>`;
+            if(archivedTasks.length === 0) archiveList.innerHTML = `<div class="text-sm text-gray-400 italic">No archived tasks.</div>`;
         };
 
         // ==========================================
